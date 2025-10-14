@@ -1,0 +1,151 @@
+# Template: Build, Test, Notify, and Deploy a containerized Python app
+# Adapted from https://gitlab.com/dxas90/network-stats
+
+.python-test:
+  image: python:3.12
+  script:
+    - pip install --upgrade pip
+    - pip install -r requirements.txt || true
+    - pytest
+
+.node-test:
+  image: node:20
+  script:
+    - npm install
+    - npm run build || true
+    - npm test
+
+.go-test:
+  image: golang:1.25
+  script:
+    - go mod download
+    - go build -v ./...
+    - go test -v ./...
+
+.notify:
+  image: bash
+  script:
+    - echo "Notify all the people that need to know about this project using some tool like Slack/Mattermost/RocketChat/MSTeams..."
+
+# Containerize the app using Buildah instead of Kaniko
+.containerize:
+  image: quay.io/buildah/stable:latest
+  stage: containerize
+  variables:
+    STORAGE_DRIVER: vfs
+    BUILDAH_FORMAT: docker
+    BUILDAH_ISOLATION: chroot
+    BUILDAH_ARGS: ""
+    BUILD_CONTEXT: $CI_PROJECT_DIR
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: $CI_REGISTRY_USER
+    REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+    IMAGE_REPOSITORY: $CI_REGISTRY_IMAGE
+
+  script:
+    # Locate Dockerfile / Containerfile
+    - |
+      if [ -z "$DOCKERFILE_PATH" ]; then
+        if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Dockerfile"
+        elif [ -n "$CONTAINERFILE_PATH" ]; then
+          DOCKERFILE_PATH="$CONTAINERFILE_PATH"
+        elif [ -f "$BUILD_CONTEXT/Containerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Containerfile"
+        else
+          echo "ERROR -> No Dockerfile or Containerfile found in build context"
+          exit 1
+        fi
+      fi
+    - echo "Using Dockerfile -> $DOCKERFILE_PATH"
+
+    # Determine image tag
+    - |
+      if [ -z "${IMAGE_TAG+x}" ]; then
+        if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
+          VERSION="latest"
+        elif [ -n "$CI_COMMIT_TAG" ]; then
+          NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9.-]/}"
+          VERSION="$SANITIZED"
+        else
+          NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9-]/}"
+          VERSION="branch-$SANITIZED"
+        fi
+        export IMAGE_TAG="$IMAGE_REPOSITORY:$VERSION"
+      fi
+    - touch buildah.env
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> buildah.env
+    - echo "Building image -> $IMAGE_TAG"
+
+    # Buildah login
+    - buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
+
+    # Single-line build and push
+    - |
+      buildah bud \
+        --isolation="$BUILDAH_ISOLATION" \
+        --storage-driver="$STORAGE_DRIVER" \
+        --format="$BUILDAH_FORMAT" \
+        --tls-verify=false \
+        -f "$DOCKERFILE_PATH" \
+        -t "$IMAGE_TAG" $BUILDAH_ARGS \
+        "$BUILD_CONTEXT"
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing image to registry..."
+        buildah push "$IMAGE_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  artifacts:
+    reports:
+      dotenv: buildah.env
+  rules:
+    - exists:
+        - Dockerfile
+        - Containerfile
+    - if: $DOCKERFILE_PATH
+    - if: $CONTAINERFILE_PATH
+    - if: $BUILD_CONTEXT != $CI_PROJECT_DIR
+
+.image-promote:
+  image: quay.io/buildah/stable:latest
+  stage: promote
+  variables:
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: $CI_REGISTRY_USER
+    REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+    IMAGE_REPOSITORY: $CI_REGISTRY_IMAGE
+    SOURCE_TAG: $IMAGE_TAG
+    TARGET_TAG: $PROMOTE_TAG
+  script:
+    - |
+      if [ -z "$SOURCE_TAG" ]; then
+        echo "ERROR: SOURCE_TAG (built image) is not set."
+        exit 1
+      fi
+      if [ -z "$TARGET_TAG" ]; then
+        echo "ERROR: TARGET_TAG (promotion tag) is not set."
+        exit 1
+      fi
+      buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
+      echo "Promoting image $SOURCE_TAG to $IMAGE_REPOSITORY:$TARGET_TAG"
+      buildah pull "$SOURCE_TAG"
+      buildah tag "$SOURCE_TAG" "$IMAGE_REPOSITORY:$TARGET_TAG"
+    - touch buildah-promotion.env
+    - echo "PROMOTED_IMAGE=$IMAGE_REPOSITORY:$TARGET_TAG" >> buildah-promotion.env
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing promoted image to registry..."
+        buildah push "$IMAGE_REPOSITORY:$TARGET_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  artifacts:
+    reports:
+      dotenv: buildah-promotion.env
+  rules:
+    - if: '$PROMOTE_TAG'
+
