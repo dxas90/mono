@@ -79,7 +79,29 @@ detect-changes:
       mkdir -p .generated
       echo "include:" > .generated/child-pipeline.yml
       for app in $CHANGED_APPS; do
-        echo "  - local: apps/${app}/.gitlab-ci.yml" >> .generated/child-pipeline.yml
+        case $app in
+          acme-lambda-cloudflare-go)
+            URL="https://raw.githubusercontent.com/dxas90/acme-lambda-cloudflare-go/main/.gitlab-ci.yml"
+            ;;
+          django-postgresql-gunicorn)
+            URL="https://raw.githubusercontent.com/dxas90/django-postgresql-gunicorn/main/.gitlab-ci.yml"
+            ;;
+          learn)
+            URL="https://raw.githubusercontent.com/dxas90/learn/main/.gitlab-ci.yml"
+            ;;
+          network-stats)
+            URL="https://raw.githubusercontent.com/dxas90/network-stats/master/.gitlab-ci.yml"
+            ;;
+          pg-database-tester)
+            URL="https://raw.githubusercontent.com/dxas90/pg-database-tester/main/.gitlab-ci.yml"
+            ;;
+          sinatra-mysql-puma)
+            URL="https://raw.githubusercontent.com/dxas90/sinatra-mysql-puma/master/.gitlab-ci.yml"
+            ;;
+        esac
+
+        curl -fsSL "$URL" -o ".generated/${app}.gitlab-ci.yml" || echo "# Missing: $app"
+        echo "  - local: .generated/${app}.gitlab-ci.yml" >> .generated/child-pipeline.yml
       done
   artifacts:
     paths:
