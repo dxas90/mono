@@ -89,7 +89,9 @@ detect-changes:
 
 trigger-dynamic-apps:
   stage: initialize
-  needs: [detect-changes]
+  needs:
+    - job: detect-changes
+      artifacts: true
   trigger:
     include:
       - artifact: .generated/child-pipeline.yml
