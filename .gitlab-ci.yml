@@ -34,6 +34,7 @@ detect-changes:
     - git fetch --unshallow 2>&1 >/dev/null || echo "Repository already unshallowed or full clone"
   script:
     - |
+      git submodule update --remote --merge --recursive
       echo "--- Detecting environment and version ---"
 
       ZERO_SHA="0000000000000000000000000000000000000000"
