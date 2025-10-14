@@ -1,17 +1,17 @@
 ---
-workflow:
-  rules:
-    # Run the pipeline for a Merge Request event targeting the main branch
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-      when: always
-    # Run the pipeline when a tag is created that matches the pattern /^v\d+\.\d+\.\d+.*$/
-    - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_NAME =~ /^v\d+\.\d+\.\d+.*$/'
-      when: always
-    # Run the pipeline when pushing to any branch except main
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
-      when: always
-#     # Disable the pipeline in all other cases
-#     - when: never
+# workflow:
+#   rules:
+#     # Run the pipeline for a Merge Request event targeting the main branch
+#     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+#       when: always
+#     # Run the pipeline when a tag is created that matches the pattern /^v\d+\.\d+\.\d+.*$/
+#     - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_NAME =~ /^v\d+\.\d+\.\d+.*$/'
+#       when: always
+#     # Run the pipeline when pushing to any branch except main
+#     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH != "main"'
+#       when: always
+# #     # Disable the pipeline in all other cases
+# #     - when: never
 
 stages:
   - initialize
