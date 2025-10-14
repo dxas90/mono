@@ -121,7 +121,7 @@ detect-changes:
         if curl -fsSL "$URL" -o "$TARGET"; then
           echo "  - artifact: $TARGET" >> .generated/child-pipeline.yml
           echo "    job: detect-changes" >> .generated/child-pipeline.yml
-        fi
+        else
           echo "# WARNING: Missing CI file for $app" >> .generated/child-pipeline.yml
         fi
       done
