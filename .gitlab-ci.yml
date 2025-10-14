@@ -105,7 +105,7 @@ detect-changes:
       done
   artifacts:
     paths:
-      - .generated/child-pipeline.yml
+      - .generated/*
     expire_in: "30 days"
 
 trigger-dynamic-apps:
