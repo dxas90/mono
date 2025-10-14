@@ -32,9 +32,9 @@ detect-changes:
     - apk add --no-cache curl jq bash git
     # Ensure we have full history for git diff to work
     - git fetch --unshallow 2>&1 >/dev/null || echo "Repository already unshallowed or full clone"
+    - git submodule update --init --remote --merge --recursive
   script:
     - |
-      git submodule update --remote --merge --recursive
       echo "--- Detecting environment and version ---"
 
       ZERO_SHA="0000000000000000000000000000000000000000"
