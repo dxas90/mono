@@ -7,9 +7,6 @@
 [submodule "apps/pg-database-tester"]
 	path = apps/pg-database-tester
 	url = https://github.com/dxas90/pg-database-tester.git
-[submodule "apps/full-workflow"]
-	path = apps/full-workflow
-	url = https://github.com/dxas90/full-workflow.git
 [submodule "apps/learn"]
 	path = apps/learn
 	url = https://github.com/dxas90/learn.git

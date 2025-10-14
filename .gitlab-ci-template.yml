@@ -1,22 +1,33 @@
 # Template: Build, Test, Notify, and Deploy a containerized Python app
 # Adapted from https://gitlab.com/dxas90/network-stats
-
+.load_env: &load_env
+  - touch build.env || true && source build.env
 .python-test:
   image: python:3.12
+  before_script:
+    - *load_env
   script:
     - pip install --upgrade pip
     - pip install -r requirements.txt || true
     - pytest
 
 .node-test:
-  image: node:20
+  image: node:22-alpine
+  before_script:
+    - *load_env
   script:
-    - npm install
-    - npm run build || true
-    - npm test
+    - apk update
+    - apk add --no-cache bash git
+    - corepack enable
+    - corepack prepare pnpm@10.18.1 --activate
+    - pnpm install --frozen-lockfile --ignore-scripts || { echo "Error -> pnpm install failed. Skipping build..."; exit 1; }
+    - pnpm run build || { echo "Error -> pnpm build failed. Skipping..."; exit 1; }
+    - pnpm test || { echo "Error -> pnpm test failed. Skipping..."; exit 1; }
 
 .go-test:
   image: golang:1.25
+  before_script:
+    - *load_env
   script:
     - go mod download
     - go build -v ./...
@@ -24,6 +35,8 @@
 
 .notify:
   image: bash
+  before_script:
+    - *load_env
   script:
     - echo "Notify all the people that need to know about this project using some tool like Slack/Mattermost/RocketChat/MSTeams..."
 
@@ -41,7 +54,24 @@
     REGISTRY_USER: $CI_REGISTRY_USER
     REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
     IMAGE_REPOSITORY: $CI_REGISTRY_IMAGE
-
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 30 mins
+  before_script:
+    - *load_env
+    # If no .npmrc is included in the repo, generate a temporary one that is configured to publish to GitLab's NPM registry
+    - |
+      if [[ ! -f .npmrc ]]; then
+        echo 'No .npmrc found! Creating one now. Please review the following link for more information: https://docs.gitlab.com/user/packages/npm_registry/?tab=For+an+instance#authenticate-to-the-package-registry'
+        {
+          echo "@${CI_PROJECT_ROOT_NAMESPACE}:registry=${CI_API_V4_URL}/packages/npm/"
+          echo "${CI_API_V4_URL#http*:}/packages/npm/:_authToken=${NPM_TOKEN}"
+        } >> .npmrc
+      fi
+    - touch build.env
+    - echo "nameserver 1.1.1.1" > /etc/resolv.conf
+    - dnf install curl -y
   script:
     # Locate Dockerfile / Containerfile
     - |
@@ -75,10 +105,13 @@
         fi
         export IMAGE_TAG="$IMAGE_REPOSITORY:$VERSION"
       fi
-    - touch buildah.env
-    - echo "IMAGE_TAG=$IMAGE_TAG" >> buildah.env
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
     - echo "Building image -> $IMAGE_TAG"
-
+    - |
+      if [ "$BUILDAH_ISOLATION" = "rootless" ]; then
+        export BUILDAH_ISOLATION=rootless
+        export STORAGE_DRIVER=vfs
+      fi
     # Buildah login
     - buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
 
@@ -99,9 +132,6 @@
       else
         echo "Skipping push (NO_PUSH defined)"
       fi
-  artifacts:
-    reports:
-      dotenv: buildah.env
   rules:
     - exists:
         - Dockerfile
@@ -149,3 +179,10 @@
   rules:
     - if: '$PROMOTE_TAG'
 
+.deploy:
+  image:
+    name: bash
+  before_script:
+    - *load_env
+  script:
+    - echo "Deploying using to Staging..."
