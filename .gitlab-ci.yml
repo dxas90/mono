@@ -14,14 +14,12 @@
 # #     - when: never
 
 stages:
-  - initialize
   - build
+  - push
   - test
-  - containerize
-  - deployment
-  - promote
-  - notify
+  - deploy
 
+<<<<<<< Updated upstream
 include:
   - local: .gitlab-ci-template.yml
 
@@ -33,7 +31,53 @@ detect-changes:
     # Ensure we have full history for git diff to work
     - git fetch --unshallow 2>&1 >/dev/null || echo "Repository already unshallowed or full clone"
     - git submodule update --init --remote --merge --recursive
+||||||| Stash base
+detect-changes:
+  paths:
+    - '**/*'
+  ignore:
+    - '*.md'
+    - '*.txt'
+    - '*.json'
+    - 'docs/**'
+    - 'examples/**'
+    - 'scripts/**'
+    - 'test/**'
+    - '.github/**'
+    - '.gitlab/**'
+    - '.vscode/**'
+    - '.idea/**'
+    - 'Makefile'
+    - 'Jenkinsfile'
+    - 'LICENSE'
+    - 'README.md'
+    - 'SECURITY.md'
+    - 'CODE_OF_CONDUCT.md'
+    - 'CONTRIBUTING.md'
+    - 'CHANGELOG.md'
+    - 'OWNERS'
+    - 'OWNERS_ALIASES'
+    - '*.iml'
+    - '*.log'
+    - '*.swp'
+=======
+variables:
+  IMAGE_NAME: "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+  EPHEMERAL_NAMESPACE: "ephemeral-${CI_COMMIT_REF_SLUG}"
+  STAGING_NAMESPACE: "staging"
+  PRODUCTION_NAMESPACE: "production"
+
+# -------------------------------------------------
+# FEATURE BRANCH PIPELINE
+# -------------------------------------------------
+
+build_feature:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
+>>>>>>> Stashed changes
   script:
+<<<<<<< Updated upstream
     - |
       git submodule update --remote --merge --recursive
       echo "--- Detecting environment and version ---"
@@ -86,7 +130,22 @@ detect-changes:
       - .generated/child-pipeline.yml
       - apps/*
     expire_in: "30 days"
+||||||| Stash base
+    - echo "Changes detected in the following files:"
+    - mkdir -p .generated
+    - touch .generated/cild-pipelines.yaml
+  artifacts:
+    paths:
+      - .generated/*
+    expire_in: 1 hour
+  stage: initialize
+  when: always
+=======
+    - echo "🔨 Building container for feature branch $CI_COMMIT_BRANCH"
+    - echo "docker build -t $IMAGE_NAME ."
+>>>>>>> Stashed changes
 
+<<<<<<< Updated upstream
 trigger-dynamic-apps:
   stage: initialize
   needs:
@@ -103,3 +162,96 @@ trigger-dynamic-apps:
   variables:
     CI_COMMIT_TAG: $CI_COMMIT_TAG
     CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME
+||||||| Stash base
+trigger-changed-childs:
+  depends:
+    - job: detect-changes
+      artifacts: true
+  stage: initialize
+  trigger:
+    include:
+      - project: '.generated/cild-pipelines.yaml'
+        file: '.gitlab-ci-child.yml'
+    strategy: depend
+  when: on_success
+
+=======
+push_feature:
+  stage: push
+  needs: [build_feature]
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
+  script:
+    - echo "📦 Pushing container for feature branch $CI_COMMIT_BRANCH"
+    - echo "docker push $IMAGE_NAME"
+
+test_feature:
+  stage: test
+  needs: [push_feature]
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
+  script:
+    - echo "🧪 Running tests for feature branch $CI_COMMIT_BRANCH"
+
+deploy_feature:
+  stage: deploy
+  needs: [test_feature]
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
+  script:
+    - echo "🚀 Deploying $IMAGE_NAME to ephemeral namespace $EPHEMERAL_NAMESPACE"
+    - echo "kubectl create namespace $EPHEMERAL_NAMESPACE || true"
+    - echo "kubectl apply -n $EPHEMERAL_NAMESPACE -f k8s/deployment.yaml"
+
+# -------------------------------------------------
+# MAIN BRANCH (MERGED) PIPELINE
+# -------------------------------------------------
+
+build_main:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "🔨 Building container for main branch"
+    - echo "docker build -t $IMAGE_NAME ."
+
+push_main:
+  stage: push
+  needs: [build_main]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "📦 Pushing container for main branch"
+    - echo "docker push $IMAGE_NAME"
+
+test_main:
+  stage: test
+  needs: [push_main]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "🧪 Running tests for main branch"
+
+deploy_staging:
+  stage: deploy
+  needs: [test_main]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "🚀 Deploying $IMAGE_NAME to staging namespace $STAGING_NAMESPACE"
+    - echo "kubectl apply -n $STAGING_NAMESPACE -f k8s/deployment.yaml"
+
+# -------------------------------------------------
+# PRODUCTION DEPLOYMENT (ON TAG)
+# -------------------------------------------------
+
+deploy_production:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - echo "🏷️ Tag detected: $CI_COMMIT_TAG"
+    - echo "🚀 Deploying image $IMAGE_NAME to production namespace $PRODUCTION_NAMESPACE"
+    - echo "kubectl apply -n $PRODUCTION_NAMESPACE -f k8s/deployment.yaml"
+
+>>>>>>> Stashed changes

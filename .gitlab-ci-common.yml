@@ -1,0 +1,179 @@
+# Template: Build, Test, Notify, and Deploy a containerized Python app
+# Adapted from https://gitlab.com/dxas90/network-stats
+.load_env: &load_env
+  - touch build.env || true && source build.env
+
+.notify:
+  image: bash
+  before_script:
+    - *load_env
+  script:
+    - echo "Notify all the people that need to know about this project using some tool like Slack/Mattermost/RocketChat/MSTeams..."
+
+# Containerize the app using Buildah instead of Kaniko
+.containerize:
+  image: quay.io/buildah/stable:latest
+  stage: containerize
+  variables:
+    STORAGE_DRIVER: vfs
+    BUILDAH_FORMAT: docker
+    BUILDAH_ISOLATION: chroot
+    BUILDAH_ARGS: ""
+    BUILD_CONTEXT: $CI_PROJECT_DIR
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: $CI_REGISTRY_USER
+    REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+    IMAGE_REPOSITORY: $CI_REGISTRY_IMAGE
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 30 mins
+  before_script:
+    - *load_env
+    # If no .npmrc is included in the repo, generate a temporary one that is configured to publish to GitLab's NPM registry
+    - |
+      if [[ ! -f .npmrc ]]; then
+        echo 'No .npmrc found! Creating one now. Please review the following link for more information: https://docs.gitlab.com/user/packages/npm_registry/?tab=For+an+instance#authenticate-to-the-package-registry'
+        {
+          echo "@${CI_PROJECT_ROOT_NAMESPACE}:registry=${CI_API_V4_URL}/packages/npm/"
+          echo "${CI_API_V4_URL#http*:}/packages/npm/:_authToken=${NPM_TOKEN}"
+        } >> .npmrc
+      fi
+    - touch build.env
+    - echo "nameserver 1.1.1.1" > /etc/resolv.conf
+    - dnf install curl -y
+  script:
+    # Locate Dockerfile / Containerfile
+    - |
+      if [ -z "$DOCKERFILE_PATH" ]; then
+        if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Dockerfile"
+        elif [ -n "$CONTAINERFILE_PATH" ]; then
+          DOCKERFILE_PATH="$CONTAINERFILE_PATH"
+        elif [ -f "$BUILD_CONTEXT/Containerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Containerfile"
+        else
+          echo "ERROR -> No Dockerfile or Containerfile found in build context"
+          exit 1
+        fi
+      fi
+    - echo "Using Dockerfile -> $DOCKERFILE_PATH"
+
+    # Determine image tag
+    - |
+      if [ -z "${IMAGE_TAG+x}" ]; then
+        if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
+          VERSION="latest"
+        elif [ -n "$CI_COMMIT_TAG" ]; then
+          NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9.-]/}"
+          VERSION="$SANITIZED"
+        else
+          NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9-]/}"
+          VERSION="branch-$SANITIZED"
+        fi
+        export IMAGE_TAG="$IMAGE_REPOSITORY:$VERSION"
+      fi
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
+    - echo "Building image -> $IMAGE_TAG"
+    - |
+      if [ "$BUILDAH_ISOLATION" = "rootless" ]; then
+        export BUILDAH_ISOLATION=rootless
+        export STORAGE_DRIVER=vfs
+      fi
+    # Buildah login
+    - buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
+
+    # Single-line build and push
+    - |
+      buildah bud \
+        --isolation="$BUILDAH_ISOLATION" \
+        --storage-driver="$STORAGE_DRIVER" \
+        --format="$BUILDAH_FORMAT" \
+        --tls-verify=false \
+        -f "$DOCKERFILE_PATH" \
+        -t "$IMAGE_TAG" $BUILDAH_ARGS \
+        "$BUILD_CONTEXT"
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing image to registry..."
+        buildah push "$IMAGE_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  rules:
+    - exists:
+        - Dockerfile
+        - Containerfile
+    - if: $DOCKERFILE_PATH
+    - if: $CONTAINERFILE_PATH
+    - if: $BUILD_CONTEXT != $CI_PROJECT_DIR
+
+.image-promote:
+  image: quay.io/buildah/stable:latest
+  stage: promote
+  variables:
+    REGISTRY: $CI_REGISTRY
+    REGISTRY_USER: $CI_REGISTRY_USER
+    REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+    IMAGE_REPOSITORY: $CI_REGISTRY_IMAGE
+    SOURCE_TAG: $IMAGE_TAG
+    TARGET_TAG: $PROMOTE_TAG
+  script:
+    - |
+      if [ -z "$SOURCE_TAG" ]; then
+        echo "ERROR: SOURCE_TAG (built image) is not set."
+        exit 1
+      fi
+      if [ -z "$TARGET_TAG" ]; then
+        echo "ERROR: TARGET_TAG (promotion tag) is not set."
+        exit 1
+      fi
+      buildah login -u "$REGISTRY_USER" --password "$REGISTRY_PASSWORD" "$REGISTRY"
+      echo "Promoting image $SOURCE_TAG to $IMAGE_REPOSITORY:$TARGET_TAG"
+      buildah pull "$SOURCE_TAG"
+      buildah tag "$SOURCE_TAG" "$IMAGE_REPOSITORY:$TARGET_TAG"
+    - touch buildah-promotion.env
+    - echo "PROMOTED_IMAGE=$IMAGE_REPOSITORY:$TARGET_TAG" >> buildah-promotion.env
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing promoted image to registry..."
+        buildah push "$IMAGE_REPOSITORY:$TARGET_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  artifacts:
+    reports:
+      dotenv: buildah-promotion.env
+  rules:
+    - if: '$PROMOTE_TAG'
+
+.deploy:
+  image: bash
+  stage: deploy
+  before_script:
+    - *load_env
+  script:
+    - |
+      if [[ "$CI_COMMIT_BRANCH" != "main" && -z "$CI_COMMIT_TAG" ]]; then
+        echo "🚀 Deploying to ephemeral namespace: $EPHEMERAL_NAMESPACE"
+        echo "kubectl create namespace $EPHEMERAL_NAMESPACE || true"
+        echo "kubectl apply -n $EPHEMERAL_NAMESPACE -f k8s/deployment.yaml"
+      elif [[ "$CI_COMMIT_BRANCH" == "main" ]]; then
+        echo "🚀 Deploying to staging namespace: $STAGING_NAMESPACE"
+        echo "kubectl apply -n $STAGING_NAMESPACE -f k8s/deployment.yaml"
+      elif [[ -n "$CI_COMMIT_TAG" ]]; then
+        echo "🚀 Deploying to production namespace: $PRODUCTION_NAMESPACE"
+        echo "kubectl apply -n $PRODUCTION_NAMESPACE -f k8s/deployment.yaml"
+      fi
+
+.cleanup_ephemeral:
+  image: bash
+  stage: cleanup
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "branch_deleted" || $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
+  script:
+    - echo "🧹 Cleaning up ephemeral namespace: $EPHEMERAL_NAMESPACE"
+    - echo "kubectl delete namespace $EPHEMERAL_NAMESPACE || echo 'Namespace already removed'"
+

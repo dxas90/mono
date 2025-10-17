@@ -1,0 +1,35 @@
+include:
+  - local: .gitlab-ci-common.yml
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy
+
+.go-test:
+  image: golang:1.25
+  stage: test
+  before_script:
+    - *load_env
+  script:
+    - echo "🏗️ Running Go tests..."
+    - go mod download
+    - go build -v ./...
+    - go test -v ./...
+
+build_go_app:
+  extends: .go-test
+
+containerize_go_app:
+  extends: .containerize
+  needs: [build_go_app]
+
+promote_go_image:
+  extends: .image-promote
+  needs: [containerize_go_app]
+
+deploy_go_app:
+  extends: .deploy
+  needs: [promote_go_image]
+

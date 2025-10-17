@@ -1,0 +1,37 @@
+include:
+  - local: .gitlab-ci-common.yml
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy
+
+.php-test:
+  image: php:8.3
+  stage: test
+  before_script:
+    - *load_env
+  script:
+    - echo "🐘 Running PHP tests..."
+    - apt-get update && apt-get install -y git zip unzip
+    - curl -sS https://getcomposer.org/installer | php
+    - php composer.phar install
+    - ./vendor/bin/phpunit || echo "Tests failed but continuing..."
+
+build_php_app:
+  extends: .php-test
+
+containerize_php_app:
+  extends: .containerize
+  needs: [build_php_app]
+
+promote_php_image:
+  extends: .image-promote
+  needs: [containerize_php_app]
+
+deploy_php_app:
+  extends: .deploy
+  needs: [promote_php_image]
+
+

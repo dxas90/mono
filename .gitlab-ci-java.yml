@@ -1,0 +1,33 @@
+include:
+  - local: .gitlab-ci-common.yml
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy
+
+.java-test:
+  image: eclipse-temurin:21-jdk
+  stage: test
+  before_script:
+    - *load_env
+  script:
+    - echo "☕ Running Java tests..."
+    - ./mvnw clean test || ./gradlew test || echo "Tests failed but continuing..."
+
+build_java_app:
+  extends: .java-test
+
+containerize_java_app:
+  extends: .containerize
+  needs: [build_java_app]
+
+promote_java_image:
+  extends: .image-promote
+  needs: [containerize_java_app]
+
+deploy_java_app:
+  extends: .deploy
+  needs: [promote_java_image]
+

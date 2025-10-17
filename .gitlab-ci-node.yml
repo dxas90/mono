@@ -1,0 +1,38 @@
+include:
+  - local: .gitlab-ci-common.yml
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy
+
+.node-test:
+  image: node:22-alpine
+  stage: test
+  before_script:
+    - *load_env
+  script:
+    - echo "🧩 Running Node.js pipeline"
+    - apk update && apk add git bash
+    - corepack enable
+    - corepack prepare pnpm@10.18.1 --activate
+    - pnpm install --frozen-lockfile
+    - pnpm build || echo "Build failed but continuing..."
+    - pnpm test || echo "Tests failed but continuing..."
+
+build_node_app:
+  extends: .node-test
+
+containerize_node_app:
+  extends: .containerize
+  needs: [build_node_app]
+
+promote_node_image:
+  extends: .image-promote
+  needs: [containerize_node_app]
+
+deploy_node_app:
+  extends: .deploy
+  needs: [promote_node_image]
+

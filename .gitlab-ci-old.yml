@@ -1,0 +1,60 @@
+stages:
+  - initialize
+  - build
+  - test
+  - containerize
+  - deployment
+  - promote
+  - notify
+
+detect-changes:
+  paths:
+    - '**/*'
+  ignore:
+    - '*.md'
+    - '*.txt'
+    - '*.json'
+    - 'docs/**'
+    - 'examples/**'
+    - 'scripts/**'
+    - 'test/**'
+    - '.github/**'
+    - '.gitlab/**'
+    - '.vscode/**'
+    - '.idea/**'
+    - 'Makefile'
+    - 'Jenkinsfile'
+    - 'LICENSE'
+    - 'README.md'
+    - 'SECURITY.md'
+    - 'CODE_OF_CONDUCT.md'
+    - 'CONTRIBUTING.md'
+    - 'CHANGELOG.md'
+    - 'OWNERS'
+    - 'OWNERS_ALIASES'
+    - '*.iml'
+    - '*.log'
+    - '*.swp'
+  script:
+    - echo "Changes detected in the following files:"
+    - mkdir -p .generated
+    - touch .generated/cild-pipelines.yaml
+  artifacts:
+    paths:
+      - .generated/*
+    expire_in: 1 hour
+  stage: initialize
+  when: always
+
+trigger-changed-childs:
+  depends:
+    - job: detect-changes
+      artifacts: true
+  stage: initialize
+  trigger:
+    include:
+      - project: '.generated/cild-pipelines.yaml'
+        file: '.gitlab-ci-child.yml'
+    strategy: depend
+  when: on_success
+
