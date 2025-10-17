@@ -179,7 +179,6 @@
   rules:
     - if: '$PROMOTE_TAG'
 
-<<<<<<< Updated upstream
 .deploy:
   image:
     name: bash
@@ -187,14 +186,3 @@
     - *load_env
   script:
     - echo "Deploying using to Staging..."
-||||||| Stash base
-=======
-.deploy:
-  image:
-    name: bash
-  before_script:
-    - *load_env
-  script:
-    - echo "Deploying using to Staging..."
-
->>>>>>> Stashed changes

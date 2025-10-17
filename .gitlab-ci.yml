@@ -19,48 +19,6 @@ stages:
   - test
   - deploy
 
-<<<<<<< Updated upstream
-include:
-  - local: .gitlab-ci-template.yml
-
-detect-changes:
-  stage: initialize
-  image: alpine:3
-  before_script:
-    - apk add --no-cache curl bash git
-    # Ensure we have full history for git diff to work
-    - git fetch --unshallow 2>&1 >/dev/null || echo "Repository already unshallowed or full clone"
-    - git submodule update --init --remote --merge --recursive
-||||||| Stash base
-detect-changes:
-  paths:
-    - '**/*'
-  ignore:
-    - '*.md'
-    - '*.txt'
-    - '*.json'
-    - 'docs/**'
-    - 'examples/**'
-    - 'scripts/**'
-    - 'test/**'
-    - '.github/**'
-    - '.gitlab/**'
-    - '.vscode/**'
-    - '.idea/**'
-    - 'Makefile'
-    - 'Jenkinsfile'
-    - 'LICENSE'
-    - 'README.md'
-    - 'SECURITY.md'
-    - 'CODE_OF_CONDUCT.md'
-    - 'CONTRIBUTING.md'
-    - 'CHANGELOG.md'
-    - 'OWNERS'
-    - 'OWNERS_ALIASES'
-    - '*.iml'
-    - '*.log'
-    - '*.swp'
-=======
 variables:
   IMAGE_NAME: "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
   EPHEMERAL_NAMESPACE: "ephemeral-${CI_COMMIT_REF_SLUG}"
@@ -75,107 +33,10 @@ build_feature:
   stage: build
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
->>>>>>> Stashed changes
   script:
-<<<<<<< Updated upstream
-    - |
-      git submodule update --remote --merge --recursive
-      echo "--- Detecting environment and version ---"
-
-      ZERO_SHA="0000000000000000000000000000000000000000"
-
-      # Determine VERSION from tag or branch
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        # Sanitize tag to be used as version
-        NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / -)
-        SANITIZED="${NOSLASH//[^a-zA-Z0-9.-]/}"
-        VERSION="$SANITIZED"
-      else
-        # Sanitize branch name for version tag
-        NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / -)
-        SANITIZED="${NOSLASH//[^a-zA-Z0-9-]/}"
-        VERSION="branch-$SANITIZED"
-      fi
-
-      # Determine BEFORE_SHA
-      if [ "$CI_COMMIT_BEFORE_SHA" = "$ZERO_SHA" ] || [ -z "$CI_COMMIT_BEFORE_SHA" ]; then
-        BEFORE_SHA=$(git rev-parse "$CI_COMMIT_SHA^" 2>/dev/null || echo "")
-      else
-        BEFORE_SHA="$CI_COMMIT_BEFORE_SHA"
-      fi
-
-      echo "CI_COMMIT_SHA=$CI_COMMIT_SHA"
-      echo "BEFORE_SHA=$BEFORE_SHA"
-
-      # Detect changed apps (folders under apps/)
-      if [ -n "$BEFORE_SHA" ]; then
-        CHANGED_APPS=$(git diff --name-only "$BEFORE_SHA" "$CI_COMMIT_SHA" | grep '^apps/' | cut -d/ -f2 | sort -u || true)
-      else
-        CHANGED_APPS=""
-      fi
-
-      if [ -z "$CHANGED_APPS" ]; then
-        echo "No changed apps detected, defaulting to all apps..."
-        CHANGED_APPS=$(ls apps 2>/dev/null || echo "")
-      fi
-
-      echo -e "Detected changed apps: \n$CHANGED_APPS"
-      mkdir -p .generated
-      echo "include:" > .generated/child-pipeline.yml
-      for app in $CHANGED_APPS; do
-        echo "  - local: apps/${app}/.gitlab-ci.yml" >> .generated/child-pipeline.yml
-      done
-  artifacts:
-    paths:
-      - .generated/child-pipeline.yml
-      - apps/*
-    expire_in: "30 days"
-||||||| Stash base
-    - echo "Changes detected in the following files:"
-    - mkdir -p .generated
-    - touch .generated/cild-pipelines.yaml
-  artifacts:
-    paths:
-      - .generated/*
-    expire_in: 1 hour
-  stage: initialize
-  when: always
-=======
     - echo "🔨 Building container for feature branch $CI_COMMIT_BRANCH"
     - echo "docker build -t $IMAGE_NAME ."
->>>>>>> Stashed changes
 
-<<<<<<< Updated upstream
-trigger-dynamic-apps:
-  stage: initialize
-  needs:
-    - job: detect-changes
-      artifacts: true
-  trigger:
-    include:
-      - artifact: .generated/child-pipeline.yml
-        job: detect-changes
-    strategy: depend
-    forward:
-      yaml_variables: false
-      pipeline_variables: false
-  variables:
-    CI_COMMIT_TAG: $CI_COMMIT_TAG
-    CI_COMMIT_REF_NAME: $CI_COMMIT_REF_NAME
-||||||| Stash base
-trigger-changed-childs:
-  depends:
-    - job: detect-changes
-      artifacts: true
-  stage: initialize
-  trigger:
-    include:
-      - project: '.generated/cild-pipelines.yaml'
-        file: '.gitlab-ci-child.yml'
-    strategy: depend
-  when: on_success
-
-=======
 push_feature:
   stage: push
   needs: [build_feature]
@@ -250,8 +111,6 @@ deploy_production:
   rules:
     - if: '$CI_COMMIT_TAG'
   script:
-    - echo "🏷️ Tag detected: $CI_COMMIT_TAG"
+    - echo "🏷️ Tag detected -> $CI_COMMIT_TAG"
     - echo "🚀 Deploying image $IMAGE_NAME to production namespace $PRODUCTION_NAMESPACE"
     - echo "kubectl apply -n $PRODUCTION_NAMESPACE -f k8s/deployment.yaml"
-
->>>>>>> Stashed changes
