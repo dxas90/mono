@@ -22,7 +22,7 @@ This guide shows you how to implement the **Feature → Staging → Production**
 |               |               |             |
 |               |               +-------------+
 |               |
-
+|               |
 |               |                    +-----------------+
 |               |             +-----►| Build Container |
 |      +--------▼--------+    |      +--------+--------+
