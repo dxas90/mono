@@ -1,0 +1,69 @@
+# Modernized GitLab CI/CD Pipeline using Components
+# This file demonstrates how to use the new component-based approach
+
+# Include components from the catalog
+include:
+  # Python test component
+  - component: $CI_SERVER_FQDN/<your-group>/components/python-test@~latest
+    inputs:
+      stage: test
+      job_name: test-python
+
+  # Node.js test component
+  - component: $CI_SERVER_FQDN/<your-group>/components/node-test@~latest
+    inputs:
+      stage: test
+      job_name: test-node
+
+  # Go test component
+  - component: $CI_SERVER_FQDN/<your-group>/components/go-test@~latest
+    inputs:
+      stage: test
+      job_name: test-go
+
+  # Java test component
+  - component: $CI_SERVER_FQDN/<your-group>/components/java-test@~latest
+    inputs:
+      stage: test
+      job_name: test-java
+
+  # PHP test component
+  - component: $CI_SERVER_FQDN/<your-group>/components/php-test@~latest
+    inputs:
+      stage: test
+      job_name: test-php
+
+  # Containerization component
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@~latest
+    inputs:
+      stage: containerize
+      job_name: build-container-image
+      image_repository: $CI_REGISTRY_IMAGE
+
+  # Image promotion component
+  - component: $CI_SERVER_FQDN/<your-group>/components/image-promote@~latest
+    inputs:
+      stage: promote
+      job_name: promote-image
+
+  # Deployment component
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@~latest
+    inputs:
+      stage: deploy
+      job_name: deploy-to-k8s
+
+  # Cleanup component
+  - component: $CI_SERVER_FQDN/<your-group>/components/ephemeral-cleanup@~latest
+    inputs:
+      stage: cleanup
+      job_name: cleanup-ephemeral-env
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy
+  - cleanup
+
+# Note: Replace '<your-group>/components' with your actual component project path
+# Usage: Set the component project as a catalog project in GitLab settings and publish a release

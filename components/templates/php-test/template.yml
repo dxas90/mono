@@ -1,0 +1,87 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: "Pipeline stage for the test job"
+    job_name:
+      default: "php-test"
+      description: "Name of the test job"
+    php_image:
+      default: "php:8.3"
+      description: "PHP Docker image"
+    composer_install:
+      default: "true"
+      description: "Run composer install"
+    test_command:
+      default: "./vendor/bin/phpunit"
+      description: "Test command to run"
+    allow_test_failure:
+      default: "false"
+      description: "Continue pipeline even if tests fail"
+    enable_cache:
+      default: "true"
+      description: "Enable dependency caching for faster builds"
+    cache_key:
+      default: "$CI_COMMIT_REF_SLUG"
+      description: "Cache key for dependencies"
+    cache_paths:
+      default: ["vendor/", "~/.composer/cache/"]
+      description: "Paths to cache"
+    cache_policy:
+      default: "pull-push"
+      description: "Cache policy (pull-push, pull, push)"
+    enable_test_report:
+      default: "false"
+      description: "Enable JUnit test report generation"
+    test_report_path:
+      default: "test-report.xml"
+      description: "Path to JUnit XML test report"
+    enable_coverage:
+      default: "false"
+      description: "Enable coverage report generation (requires Xdebug or PCOV)"
+    coverage_path:
+      default: "coverage.xml"
+      description: "Path to coverage report (Cobertura/Clover XML format)"
+    coverage_format:
+      default: "cobertura"
+      description: "Coverage report format (cobertura or clover)"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.php_image ]]
+  cache:
+    key: $[[ inputs.cache_key ]]
+    paths: $[[ inputs.cache_paths ]]
+    policy: $[[ inputs.cache_policy ]]
+    when: $[[ inputs.enable_cache == "true" && "on_success" || "never" ]]
+  before_script:
+    - echo "🐘 Setting up PHP environment..."
+    - apt-get update && apt-get install -y git zip unzip
+    - |
+      if [ "$[[ inputs.composer_install ]]" = "true" ]; then
+        echo "📦 Installing Composer..."
+        curl -sS https://getcomposer.org/installer | php
+        php composer.phar install
+      fi
+  script:
+    - echo "🧪 Running PHP tests..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        $[[ inputs.test_command ]] || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+      else
+        $[[ inputs.test_command ]]
+      fi
+  needs: $[[ inputs.needs ]]
+  artifacts:
+    when: always
+    reports:
+      junit: $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      coverage_report:
+        coverage_format: $[[ inputs.coverage_format ]]
+        path: $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    paths:
+      - $[[ inputs.enable_coverage == "true" && "coverage/" || "" ]]
+    expire_in: 30 days

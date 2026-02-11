@@ -1,0 +1,98 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: "Pipeline stage for the test job"
+    job_name:
+      default: "node-test"
+      description: "Name of the test job"
+    node_image:
+      default: "node:22-alpine"
+      description: "Node.js Docker image"
+    pnpm_version:
+      default: "10.18.1"
+      description: "pnpm version to use"
+    install_command:
+      default: "pnpm install --frozen-lockfile"
+      description: "Package installation command"
+    build_command:
+      default: "pnpm build"
+      description: "Build command (optional)"
+    test_command:
+      default: "pnpm test"
+      description: "Test command to run"
+    allow_test_failure:
+      default: "false"
+      description: "Continue pipeline even if tests/build fail"
+    enable_cache:
+      default: "true"
+      description: "Enable dependency caching for faster builds"
+    cache_key:
+      default: "$CI_COMMIT_REF_SLUG"
+      description: "Cache key for dependencies"
+    cache_paths:
+      default: ["node_modules/", ".pnpm-store/"]
+      description: "Paths to cache"
+    cache_policy:
+      default: "pull-push"
+      description: "Cache policy (pull-push, pull, push)"
+    enable_test_report:
+      default: "false"
+      description: "Enable JUnit test report generation"
+    test_report_path:
+      default: "junit.xml"
+      description: "Path to JUnit XML test report"
+    enable_coverage:
+      default: "false"
+      description: "Enable coverage report generation"
+    coverage_path:
+      default: "coverage/cobertura-coverage.xml"
+      description: "Path to coverage report (Cobertura XML format)"
+    coverage_format:
+      default: "cobertura"
+      description: "Coverage report format"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.node_image ]]
+  cache:
+    key: $[[ inputs.cache_key ]]
+    paths: $[[ inputs.cache_paths ]]
+    policy: $[[ inputs.cache_policy ]]
+    when: $[[ inputs.enable_cache == "true" && "on_success" || "never" ]]
+  before_script:
+    - echo "🧩 Setting up Node.js environment..."
+    - apk update && apk add git bash
+    - corepack enable
+    - corepack prepare pnpm@$[[ inputs.pnpm_version ]] --activate
+  script:
+    - echo "📦 Installing dependencies..."
+    - $[[ inputs.install_command ]]
+    - echo "🏗️  Building project..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        $[[ inputs.build_command ]] || echo "⚠️  Build failed but continuing (allow_test_failure=true)..."
+      else
+        $[[ inputs.build_command ]]
+      fi
+    - echo "🧪 Running tests..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        $[[ inputs.test_command ]] || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+      else
+        $[[ inputs.test_command ]]
+      fi
+  needs: $[[ inputs.needs ]]
+  artifacts:
+    when: always
+    reports:
+      junit: $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      coverage_report:
+        coverage_format: $[[ inputs.coverage_format ]]
+        path: $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    paths:
+      - $[[ inputs.enable_coverage == "true" && "coverage/" || "" ]]
+    expire_in: 30 days

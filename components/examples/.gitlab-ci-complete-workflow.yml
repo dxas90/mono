@@ -1,0 +1,188 @@
+# Complete GitLab CI/CD Workflow Example
+# Implements: Feature Branch → Staging → Production Flow
+#
+# Workflow:
+# 1. Feature Branch: Test → Build → Deploy to Ephemeral → Loop back to test
+# 2. Main Branch: Test → Build → Deploy to Staging → Loop back to test
+# 3. Tagged Release: Deploy to Production
+
+include:
+  # Test component - runs on all branches
+  - component: $CI_SERVER_FQDN/<your-group>/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-application
+      python_image: python:3.12
+      requirements_file: requirements.txt
+      test_command: pytest --cov=src tests/
+      enable_cache: "true"
+
+  # Build container - runs on feature branches and main
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-container
+      image_repository: $CI_REGISTRY_IMAGE
+      tls_verify: "true"
+      needs: [test-application]
+      rules:
+        - if: '$CI_COMMIT_BRANCH'  # Run on all branches
+
+  # Deploy to ephemeral namespace (feature branches only)
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-ephemeral
+      ephemeral_namespace: "$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG"
+      enable_ephemeral: "true"
+      k8s_manifest_path: k8s/deployment.yaml
+      needs: [build-container]
+
+  # Deploy to staging (main branch only)
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-staging
+      staging_namespace: staging
+      enable_ephemeral: "false"
+      k8s_manifest_path: k8s/deployment.yaml
+      needs: [build-container]
+
+  # Cleanup ephemeral environments (manual trigger)
+  - component: $CI_SERVER_FQDN/<your-group>/components/ephemeral-cleanup@1.0.0
+    inputs:
+      stage: cleanup
+      job_name: cleanup-ephemeral-env
+      ephemeral_namespace: "$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG"
+
+# Define pipeline stages
+stages:
+  - test
+  - build
+  - deploy
+  - verify
+  - promote
+  - cleanup
+
+# Global variables
+variables:
+  IMAGE_NAME: "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+  EPHEMERAL_NAMESPACE: "$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG"
+  STAGING_NAMESPACE: "staging"
+  PRODUCTION_NAMESPACE: "production"
+
+# -------------------------------------------------
+# VERIFICATION JOBS (for test/verify loops)
+# -------------------------------------------------
+
+# Verify deployment in ephemeral namespace
+verify-ephemeral:
+  stage: verify
+  image: curlimages/curl:latest
+  needs: [deploy-ephemeral]
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
+  script:
+    - echo "🔍 Verifying deployment in ephemeral namespace $EPHEMERAL_NAMESPACE"
+    - echo "Would run health checks, smoke tests, integration tests here"
+    - echo "curl http://$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG.example.com/health"
+    - echo "✅ Verification complete - ready for code review"
+
+# Verify deployment in staging namespace
+verify-staging:
+  stage: verify
+  image: curlimages/curl:latest
+  needs: [deploy-staging]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - echo "🔍 Verifying deployment in staging namespace"
+    - echo "Would run comprehensive integration tests here"
+    - echo "curl http://staging.example.com/health"
+    - echo "✅ Staging verification complete - ready to tag for production"
+
+# -------------------------------------------------
+# PRODUCTION DEPLOYMENT (triggered by git tags)
+# -------------------------------------------------
+
+deploy-production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  variables:
+    PRODUCTION_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+  script:
+    - echo "🏷️  Tag detected: $CI_COMMIT_TAG"
+    - echo "🚀 Deploying to production namespace: $PRODUCTION_NAMESPACE"
+    - echo "   Using image: $PRODUCTION_IMAGE"
+    - |
+      # In real scenario, you would:
+      # 1. Pull the tagged image from registry
+      # 2. Apply production manifests with the specific tag
+      # 3. Wait for rollout to complete
+      # 4. Run smoke tests
+      echo "kubectl set image deployment/app app=$PRODUCTION_IMAGE -n $PRODUCTION_NAMESPACE"
+      echo "kubectl rollout status deployment/app -n $PRODUCTION_NAMESPACE --timeout=5m"
+    - echo "✅ Production deployment complete"
+
+verify-production:
+  stage: verify
+  image: curlimages/curl:latest
+  needs: [deploy-production]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - echo "🔍 Verifying production deployment for tag $CI_COMMIT_TAG"
+    - echo "Would run production smoke tests here"
+    - echo "curl http://production.example.com/health"
+    - echo "✅ Production verification complete"
+
+# -------------------------------------------------
+# PROMOTION (optional - promote staging image to production)
+# -------------------------------------------------
+
+promote-to-production:
+  stage: promote
+  image: quay.io/buildah/stable:latest
+  rules:
+    - if: '$CI_COMMIT_TAG && $PROMOTE_STAGING_IMAGE == "true"'
+      when: manual
+  variables:
+    SOURCE_IMAGE: "$CI_REGISTRY_IMAGE:latest"
+    TARGET_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+  script:
+    - echo "📦 Promoting staging image to production tag"
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - buildah pull "$SOURCE_IMAGE"
+    - buildah tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+    - buildah push "$TARGET_IMAGE"
+    - echo "✅ Image promoted: $SOURCE_IMAGE → $TARGET_IMAGE"
+
+# -------------------------------------------------
+# WORKFLOW SUMMARY
+# -------------------------------------------------
+
+# Feature Branch Workflow:
+# 1. Push to feature branch
+# 2. test-application (runs tests with caching)
+# 3. build-container (builds & pushes $CI_REGISTRY_IMAGE:feature-branch-name)
+# 4. deploy-ephemeral (deploys to <project>-feature-branch-name namespace)
+# 5. verify-ephemeral (runs health checks)
+# 6. Loop back: Make changes → Push → Re-run from step 2
+
+# Main Branch Workflow (after merge):
+# 1. Merge to main
+# 2. test-application (runs tests with caching)
+# 3. build-container (builds & pushes $CI_REGISTRY_IMAGE:main)
+# 4. deploy-staging (deploys to staging namespace)
+# 5. verify-staging (runs integration tests)
+# 6. Loop back: If issues found → Fix → Re-run from step 2
+
+# Production Deployment (tagging):
+# 1. Tag the main branch: git tag v1.0.0 && git push origin v1.0.0
+# 2. deploy-production (deploys tagged image to production)
+# 3. verify-production (runs smoke tests)
+
+# Cleanup (manual):
+# - Trigger cleanup-ephemeral-env job to delete ephemeral namespace

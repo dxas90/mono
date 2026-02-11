@@ -1,0 +1,64 @@
+# Production-Ready GitLab CI/CD Pipeline
+# Using GitLab Components for a Python Application
+# Feature → Staging → Production Flow
+
+include:
+  # Test
+  - component: $CI_SERVER_FQDN/your-group/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test
+      enable_cache: "true"
+
+  # Build & Push Container
+  - component: $CI_SERVER_FQDN/your-group/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build
+      needs: [test]
+
+  # Deploy to Ephemeral (Feature Branches)
+  - component: $CI_SERVER_FQDN/your-group/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy-ephemeral
+      job_name: deploy-feature
+      needs: [build]
+
+  # Deploy to Staging (Main Branch)
+  - component: $CI_SERVER_FQDN/your-group/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy-staging
+      job_name: deploy-staging
+      staging_namespace: staging
+      enable_ephemeral: "false"
+      needs: [build]
+
+  # Cleanup
+  - component: $CI_SERVER_FQDN/your-group/components/ephemeral-cleanup@1.0.0
+    inputs:
+      stage: cleanup
+      job_name: cleanup
+
+stages:
+  - test
+  - build
+  - deploy-ephemeral
+  - deploy-staging
+  - deploy-production
+
+# Production deployment (manual, triggered by tags)
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+  before_script:
+    - touch build.env && source build.env
+  script:
+    - echo "🚀 Deploying $CI_COMMIT_TAG to production"
+    - kubectl set image deployment/app app=$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG -n production
+    - kubectl rollout status deployment/app -n production
+  environment:
+    name: production
+    url: https://production.example.com

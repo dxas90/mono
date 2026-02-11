@@ -1,0 +1,260 @@
+# Monorepo Multi-Service Workflow Example
+# Demonstrates the complete Feature → Staging → Production flow
+# for a monorepo with multiple microservices
+
+include:
+  # -------------------------------------------------
+  # SERVICE 1: Python API
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-api
+      python_image: python:3.12
+      requirements_file: apps/api/requirements.txt
+      test_command: cd apps/api && pytest
+      enable_cache: "true"
+      cache_key: "api-$CI_COMMIT_REF_SLUG"
+
+  - component: $CI_SERVER_FQDN/your-group/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-api
+      build_context: ./apps/api
+      dockerfile_path: apps/api/Dockerfile
+      image_repository: $CI_REGISTRY_IMAGE/api
+      needs: [test-api]
+
+  - component: $CI_SERVER_FQDN/your-group/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-api
+      k8s_manifest_path: apps/api/k8s/deployment.yaml
+      needs: [build-api]
+
+  # -------------------------------------------------
+  # SERVICE 2: Node.js Frontend
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/node-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-frontend
+      node_image: node:22-alpine
+      install_command: cd apps/frontend && pnpm install --frozen-lockfile
+      build_command: cd apps/frontend && pnpm build
+      test_command: cd apps/frontend && pnpm test
+      enable_cache: "true"
+      cache_key: "frontend-$CI_COMMIT_REF_SLUG"
+
+  - component: $CI_SERVER_FQDN/your-group/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-frontend
+      build_context: ./apps/frontend
+      dockerfile_path: apps/frontend/Dockerfile
+      image_repository: $CI_REGISTRY_IMAGE/frontend
+      needs: [test-frontend]
+
+  - component: $CI_SERVER_FQDN/your-group/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-frontend
+      k8s_manifest_path: apps/frontend/k8s/deployment.yaml
+      needs: [build-frontend]
+
+  # -------------------------------------------------
+  # SERVICE 3: Go Worker
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/go-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-worker
+      go_image: golang:1.25
+      build_flags: -v
+      test_flags: -v -race
+      enable_cache: "true"
+      cache_key: "worker-$CI_COMMIT_REF_SLUG"
+
+  - component: $CI_SERVER_FQDN/your-group/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-worker
+      build_context: ./apps/worker
+      dockerfile_path: apps/worker/Dockerfile
+      image_repository: $CI_REGISTRY_IMAGE/worker
+      needs: [test-worker]
+
+  - component: $CI_SERVER_FQDN/your-group/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-worker
+      k8s_manifest_path: apps/worker/k8s/deployment.yaml
+      needs: [build-worker]
+
+  # -------------------------------------------------
+  # CLEANUP
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/ephemeral-cleanup@1.0.0
+    inputs:
+      stage: cleanup
+      job_name: cleanup-ephemeral
+
+stages:
+  - test
+  - build
+  - deploy
+  - verify
+  - promote
+  - cleanup
+
+variables:
+  EPHEMERAL_NAMESPACE: "$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG"
+  STAGING_NAMESPACE: "staging"
+  PRODUCTION_NAMESPACE: "production"
+
+# -------------------------------------------------
+# VERIFICATION JOBS
+# -------------------------------------------------
+
+# Verify all services in ephemeral environment
+verify-ephemeral:
+  stage: verify
+  image: curlimages/curl:latest
+  needs:
+    - deploy-api
+    - deploy-frontend
+    - deploy-worker
+  rules:
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
+  script:
+    - echo "🔍 Verifying all services in ephemeral namespace"
+    - echo "API health: curl http://api.$EPHEMERAL_NAMESPACE.svc.cluster.local/health"
+    - echo "Frontend health: curl http://frontend.$EPHEMERAL_NAMESPACE.svc.cluster.local/health"
+    - echo "Worker health: curl http://worker.$EPHEMERAL_NAMESPACE.svc.cluster.local/health"
+    - echo "✅ All services healthy in ephemeral environment"
+
+# Verify all services in staging
+verify-staging:
+  stage: verify
+  image: curlimages/curl:latest
+  needs:
+    - deploy-api
+    - deploy-frontend
+    - deploy-worker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - echo "🔍 Running comprehensive integration tests"
+    - echo "API → Frontend integration tests"
+    - echo "API → Worker integration tests"
+    - echo "End-to-end smoke tests"
+    - echo "✅ All integration tests passed"
+
+# -------------------------------------------------
+# PRODUCTION DEPLOYMENT
+# -------------------------------------------------
+
+# Deploy all services to production (manual, triggered by tag)
+deploy-production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+  script:
+    - echo "🏷️  Deploying tag $CI_COMMIT_TAG to production"
+    - echo "Updating API..."
+    - kubectl set image deployment/api api=$CI_REGISTRY_IMAGE/api:$CI_COMMIT_TAG -n $PRODUCTION_NAMESPACE
+    - kubectl rollout status deployment/api -n $PRODUCTION_NAMESPACE
+    - echo "Updating Frontend..."
+    - kubectl set image deployment/frontend frontend=$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_TAG -n $PRODUCTION_NAMESPACE
+    - kubectl rollout status deployment/frontend -n $PRODUCTION_NAMESPACE
+    - echo "Updating Worker..."
+    - kubectl set image deployment/worker worker=$CI_REGISTRY_IMAGE/worker:$CI_COMMIT_TAG -n $PRODUCTION_NAMESPACE
+    - kubectl rollout status deployment/worker -n $PRODUCTION_NAMESPACE
+    - echo "✅ All services deployed to production"
+  environment:
+    name: production
+    url: https://production.example.com
+
+# Verify production deployment
+verify-production:
+  stage: verify
+  image: curlimages/curl:latest
+  needs: [deploy-production]
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  script:
+    - echo "🔍 Verifying production deployment"
+    - echo "curl https://api.production.example.com/health"
+    - echo "curl https://production.example.com/health"
+    - echo "✅ Production verification complete"
+
+# -------------------------------------------------
+# WORKFLOW EXPLANATION
+# -------------------------------------------------
+
+# FEATURE BRANCH FLOW (e.g., feature/new-api-endpoint):
+#
+# 1. Developer pushes to feature branch
+#    ↓
+# 2. All 3 services tested in parallel:
+#    - test-api (Python tests with cache)
+#    - test-frontend (Node.js tests with cache)
+#    - test-worker (Go tests with cache)
+#    ↓
+# 3. All 3 services built in parallel:
+#    - build-api → $CI_REGISTRY_IMAGE/api:feature-new-api-endpoint
+#    - build-frontend → $CI_REGISTRY_IMAGE/frontend:feature-new-api-endpoint
+#    - build-worker → $CI_REGISTRY_IMAGE/worker:feature-new-api-endpoint
+#    ↓
+# 4. All 3 services deployed to ephemeral namespace:
+#    - Namespace: myapp-feature-new-api-endpoint
+#    - deploy-api, deploy-frontend, deploy-worker
+#    ↓
+# 5. verify-ephemeral runs health checks
+#    ↓
+# 6. Developer tests at: https://myapp-feature-new-api-endpoint.staging.example.com
+#    ↓
+# 7. If bugs found: Push fix → Loop back to step 2
+
+# MAIN BRANCH FLOW (after merge):
+#
+# 1. Feature merged to main
+#    ↓
+# 2. All services tested in parallel
+#    ↓
+# 3. All services built with :latest tag
+#    ↓
+# 4. All services deployed to staging namespace
+#    ↓
+# 5. verify-staging runs integration tests
+#    ↓
+# 6. QA tests at: https://staging.example.com
+#    ↓
+# 7. Ready for production tagging
+
+# PRODUCTION FLOW:
+#
+# 1. Tag the release: git tag v1.2.3 && git push origin v1.2.3
+#    ↓
+# 2. deploy-production job appears (manual approval required)
+#    ↓
+# 3. Team lead reviews and clicks "Play" button
+#    ↓
+# 4. All services deployed to production with v1.2.3 tag
+#    ↓
+# 5. verify-production runs smoke tests
+#    ↓
+# 6. Monitor at: https://production.example.com
+#    ↓
+# 7. 🎉 Release complete!
+
+# BENEFITS OF THIS APPROACH:
+# - Each service tested independently (parallel execution)
+# - Services can be developed at different speeds
+# - Caching makes iterations 30-70% faster
+# - Ephemeral namespaces isolate feature testing
+# - Same pipeline for all environments
+# - Full GitOps: infrastructure as code
+# - Easy rollback: redeploy previous tag

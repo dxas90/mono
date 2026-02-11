@@ -1,0 +1,298 @@
+# Test Reports and Coverage Example
+# Demonstrates artifact management (test reports, coverage) across all language components
+#
+# What This Example Shows:
+# - JUnit test reports integrated into GitLab MR UI
+# - Code coverage reports shown in GitLab MR diff view
+# - Historical test and coverage trends
+# - HTML coverage artifacts for browsing
+#
+# Benefits:
+# ✅ Test results visible directly in merge requests
+# ✅ Coverage percentage shown on changed lines
+# ✅ Failed tests link directly to test output
+# ✅ Coverage trends tracked over time
+# ✅ Downloadable HTML coverage reports
+
+include:
+  # -------------------------------------------------
+  # PYTHON: Test Reports + Coverage
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-python
+      python_image: python:3.12
+      requirements_file: apps/python-api/requirements.txt
+      # Enable coverage with pytest-cov
+      test_command: |
+        cd apps/python-api
+        pytest --cov=src --cov-report=xml --cov-report=html --junitxml=test-report.xml -v
+      enable_test_report: "true"
+      test_report_path: apps/python-api/test-report.xml
+      enable_coverage: "true"
+      coverage_path: apps/python-api/coverage.xml
+      coverage_format: cobertura
+
+  # -------------------------------------------------
+  # NODE.JS: Test Reports + Coverage
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/node-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-nodejs
+      node_image: node:22-alpine
+      install_command: cd apps/frontend && pnpm install --frozen-lockfile
+      build_command: cd apps/frontend && pnpm build
+      # Enable coverage with jest
+      test_command: cd apps/frontend && pnpm test -- --coverage --coverageReporters=cobertura --coverageReporters=html
+      enable_test_report: "true"
+      test_report_path: apps/frontend/junit.xml
+      enable_coverage: "true"
+      coverage_path: apps/frontend/coverage/cobertura-coverage.xml
+      coverage_format: cobertura
+
+  # -------------------------------------------------
+  # GO: Test Reports + Coverage
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/go-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-go
+      go_image: golang:1.25
+      # Enable coverage with gotestsum + gocover-cobertura
+      test_flags: -v -race -coverprofile=coverage.out -covermode=atomic
+      enable_test_report: "true"
+      test_report_path: test-report.xml
+      enable_coverage: "true"
+      coverage_path: coverage.xml
+      coverage_format: cobertura
+
+  # -------------------------------------------------
+  # JAVA: Test Reports + Coverage
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/java-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-java
+      java_image: eclipse-temurin:21-jdk
+      build_tool: maven
+      # Enable Jacoco coverage
+      maven_command: ./mvnw clean test jacoco:report
+      enable_test_report: "true"
+      test_report_path: target/surefire-reports/TEST-*.xml
+      enable_coverage: "true"
+      coverage_path: target/site/jacoco/jacoco.xml
+      coverage_format: jacoco
+
+  # -------------------------------------------------
+  # PHP: Test Reports + Coverage
+  # -------------------------------------------------
+  - component: $CI_SERVER_FQDN/your-group/components/php-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-php
+      php_image: php:8.3
+      # Enable coverage with PHPUnit + Xdebug
+      test_command: |
+        ./vendor/bin/phpunit \
+          --coverage-cobertura coverage.xml \
+          --coverage-html coverage/ \
+          --log-junit test-report.xml
+      enable_test_report: "true"
+      test_report_path: test-report.xml
+      enable_coverage: "true"
+      coverage_path: coverage.xml
+      coverage_format: cobertura
+
+stages:
+  - test
+
+# -------------------------------------------------
+# SETUP INSTRUCTIONS
+# -------------------------------------------------
+
+# Python (pytest + pytest-cov):
+#
+# requirements.txt:
+#   pytest
+#   pytest-cov
+#
+# Run locally:
+#   pytest --cov=src --cov-report=xml --cov-report=html --junitxml=test-report.xml
+
+# Node.js (Jest):
+#
+# package.json:
+#   "devDependencies": {
+#     "jest": "^29.0.0",
+#     "jest-junit": "^16.0.0"
+#   },
+#   "jest": {
+#     "reporters": [
+#       "default",
+#       ["jest-junit", {"outputDirectory": ".", "outputName": "junit.xml"}]
+#     ]
+#   }
+#
+# Run locally:
+#   pnpm test -- --coverage --coverageReporters=cobertura --coverageReporters=html
+
+# Go (gotestsum + gocover-cobertura):
+#
+# Install tools:
+#   go install gotest.tools/gotestsum@latest
+#   go install github.com/boumenot/gocover-cobertura@latest
+#
+# Run locally:
+#   go test -v -race -coverprofile=coverage.out ./...
+#   gotestsum --junitfile test-report.xml --format testname
+#   gocover-cobertura < coverage.out > coverage.xml
+
+# Java (Maven + Jacoco):
+#
+# pom.xml:
+#   <plugin>
+#     <groupId>org.jacoco</groupId>
+#     <artifactId>jacoco-maven-plugin</artifactId>
+#     <version>0.8.11</version>
+#     <executions>
+#       <execution>
+#         <goals>
+#           <goal>prepare-agent</goal>
+#         </goals>
+#       </execution>
+#       <execution>
+#         <id>report</id>
+#         <phase>test</phase>
+#         <goals>
+#           <goal>report</goal>
+#         </goals>
+#       </execution>
+#     </executions>
+#   </plugin>
+#
+# Run locally:
+#   ./mvnw clean test jacoco:report
+
+# PHP (PHPUnit + Xdebug):
+#
+# Install Xdebug:
+#   pecl install xdebug
+#   docker-php-ext-enable xdebug
+#
+# phpunit.xml:
+#   <coverage>
+#     <include>
+#       <directory suffix=".php">src</directory>
+#     </include>
+#   </coverage>
+#
+# Run locally:
+#   ./vendor/bin/phpunit --coverage-cobertura coverage.xml --coverage-html coverage/ --log-junit test-report.xml
+
+# -------------------------------------------------
+# GITLAB UI INTEGRATION
+# -------------------------------------------------
+
+# Once enabled, GitLab will show:
+#
+# 1. Test Results Tab in Merge Request:
+#    - Total tests run, passed, failed, skipped
+#    - List of failed tests with error messages
+#    - Test execution time
+#    - Historical test trends
+#
+# 2. Coverage in MR Diff View:
+#    - Coverage percentage for each changed file
+#    - Green/red highlighting on changed lines
+#    - Coverage trend (increasing/decreasing)
+#    - Link to full coverage report
+#
+# 3. Pipeline Test Summary:
+#    - Test pass/fail summary in pipeline view
+#    - Quick access to failed test details
+#    - Coverage percentage badge
+#
+# 4. Downloadable Artifacts:
+#    - HTML coverage reports (browse-able)
+#    - JUnit XML (for CI/CD tools)
+#    - Cobertura/Jacoco XML (for analysis)
+#    - Expires after 30 days (configurable)
+
+# -------------------------------------------------
+# ADVANCED EXAMPLES
+# -------------------------------------------------
+
+# Monorepo with Multiple Services:
+#
+# include:
+#   - component: .../python-test@1.0.0
+#     inputs:
+#       job_name: test-api
+#       test_command: cd apps/api && pytest --cov=src --cov-report=xml --junitxml=test-report.xml
+#       enable_test_report: "true"
+#       test_report_path: apps/api/test-report.xml
+#       enable_coverage: "true"
+#       coverage_path: apps/api/coverage.xml
+#
+#   - component: .../node-test@1.0.0
+#     inputs:
+#       job_name: test-frontend
+#       test_command: cd apps/frontend && pnpm test -- --coverage
+#       enable_test_report: "true"
+#       test_report_path: apps/frontend/junit.xml
+#       enable_coverage: "true"
+#       coverage_path: apps/frontend/coverage/cobertura-coverage.xml
+
+# Conditional Coverage (Run on Main Branch Only):
+#
+# include:
+#   - component: .../python-test@1.0.0
+#     inputs:
+#       enable_coverage: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && 'true' || 'false'"
+
+# Custom Coverage Thresholds:
+#
+# test-python-app:
+#   after_script:
+#     - |
+#       COVERAGE=$(sed -n 's/.*line-rate="\([^"]*\)".*/\1/p' coverage.xml | head -n1)
+#       COVERAGE_PERCENT=$(echo "$COVERAGE * 100" | bc)
+#       if (( $(echo "$COVERAGE_PERCENT < 80" | bc -l) )); then
+#         echo "❌ Coverage is below 80% ($COVERAGE_PERCENT%)"
+#         exit 1
+#       fi
+#       echo "✅ Coverage is above 80% ($COVERAGE_PERCENT%)"
+
+# -------------------------------------------------
+# TROUBLESHOOTING
+# -------------------------------------------------
+
+# Problem: Test report not showing in GitLab MR
+# Solution:
+#   1. Ensure enable_test_report: "true"
+#   2. Verify test_report_path points to valid JUnit XML
+#   3. Check artifacts section includes the report file
+#   4. Confirm test command generates JUnit XML
+
+# Problem: Coverage not showing in GitLab MR diff
+# Solution:
+#   1. Ensure enable_coverage: "true"
+#   2. Verify coverage_path points to valid Cobertura/Jacoco XML
+#   3. Check coverage_format matches actual format
+#   4. Ensure coverage report includes file paths relative to repo root
+
+# Problem: "No coverage report found" error
+# Solution:
+#   1. Run test command locally to verify it generates coverage.xml
+#   2. Check that coverage path is correct and accessible
+#   3. Ensure coverage format is supported (cobertura, jacoco)
+#   4. Verify coverage XML is valid (not empty, correct schema)
+
+# Problem: Coverage shows 0% for all files
+# Solution:
+#   1. Ensure file paths in coverage report are relative to repo root
+#   2. Check that source code is in the paths specified in coverage report
+#   3. Verify coverage was actually collected during test run
+#   4. Confirm coverage report is not filtered to exclude all files

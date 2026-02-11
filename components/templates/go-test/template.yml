@@ -1,0 +1,89 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: "Pipeline stage for the test job"
+    job_name:
+      default: "go-test"
+      description: "Name of the test job"
+    go_image:
+      default: "golang:1.25"
+      description: "Go Docker image"
+    build_flags:
+      default: "-v"
+      description: "Go build flags"
+    test_flags:
+      default: "-v"
+      description: "Go test flags"
+    allow_test_failure:
+      default: "false"
+      description: "Continue pipeline even if tests/build fail"
+    enable_cache:
+      default: "true"
+      description: "Enable dependency caching for faster builds"
+    cache_key:
+      default: "$CI_COMMIT_REF_SLUG"
+      description: "Cache key for dependencies"
+    cache_paths:
+      default: [".go-pkg/", "~/go/pkg/mod/"]
+      description: "Paths to cache"
+    cache_policy:
+      default: "pull-push"
+      description: "Cache policy (pull-push, pull, push)"
+    enable_test_report:
+      default: "false"
+      description: "Enable JUnit test report generation (requires gotestsum or go-junit-report)"
+    test_report_path:
+      default: "test-report.xml"
+      description: "Path to JUnit XML test report"
+    enable_coverage:
+      default: "false"
+      description: "Enable coverage report generation"
+    coverage_path:
+      default: "coverage.xml"
+      description: "Path to coverage report (Cobertura XML format)"
+    coverage_format:
+      default: "cobertura"
+      description: "Coverage report format"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.go_image ]]
+  cache:
+    key: $[[ inputs.cache_key ]]
+    paths: $[[ inputs.cache_paths ]]
+    policy: $[[ inputs.cache_policy ]]
+    when: $[[ inputs.enable_cache == "true" && "on_success" || "never" ]]
+  before_script:
+    - echo "🏗️ Setting up Go environment..."
+  script:
+    - echo "📦 Downloading Go modules..."
+    - go mod download
+    - echo "🔨 Building Go application..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        go build $[[ inputs.build_flags ]] ./... || echo "⚠️  Build failed but continuing (allow_test_failure=true)..."
+      else
+        go build $[[ inputs.build_flags ]] ./...
+      fi
+    - echo "🧪 Running Go tests..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        go test $[[ inputs.test_flags ]] ./... || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+      else
+        go test $[[ inputs.test_flags ]] ./...
+      fi
+  needs: $[[ inputs.needs ]]
+  artifacts:
+    when: always
+    reports:
+      junit: $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      coverage_report:
+        coverage_format: $[[ inputs.coverage_format ]]
+        path: $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    paths:
+      - $[[ inputs.enable_coverage == "true" && "coverage.html" || "" ]]
+    expire_in: 30 days

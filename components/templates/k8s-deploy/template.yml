@@ -1,0 +1,60 @@
+spec:
+  inputs:
+    stage:
+      default: deploy
+      description: "Pipeline stage for the deploy job"
+    job_name:
+      default: "deploy"
+      description: "Name of the deployment job"
+    kubectl_image:
+      default: "bitnami/kubectl:latest"
+      description: "kubectl container image"
+    k8s_manifest_path:
+      default: "k8s/deployment.yaml"
+      description: "Path to Kubernetes manifest file"
+    ephemeral_namespace:
+      default: "$CI_PROJECT_NAME-$CI_COMMIT_REF_SLUG"
+      description: "Namespace for ephemeral/branch deployments"
+    staging_namespace:
+      default: "staging"
+      description: "Namespace for staging deployments (main branch)"
+    production_namespace:
+      default: "production"
+      description: "Namespace for production deployments (tags)"
+    needs:
+      default: []
+      description: "Job dependencies"
+    enable_ephemeral:
+      default: "true"
+      description: "Enable ephemeral deployments for feature branches"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.kubectl_image ]]
+  variables:
+    EPHEMERAL_NAMESPACE: $[[ inputs.ephemeral_namespace ]]
+    STAGING_NAMESPACE: $[[ inputs.staging_namespace ]]
+    PRODUCTION_NAMESPACE: $[[ inputs.production_namespace ]]
+    K8S_MANIFEST_PATH: $[[ inputs.k8s_manifest_path ]]
+  before_script:
+    - touch build.env || true && source build.env
+    - touch buildah-promotion.env || true && source buildah-promotion.env
+  script:
+    - |
+      if [[ "$CI_COMMIT_BRANCH" != "$CI_DEFAULT_BRANCH" && -z "$CI_COMMIT_TAG" && "$[[ inputs.enable_ephemeral ]]" == "true" ]]; then
+        echo "🚀 Deploying to ephemeral namespace: $EPHEMERAL_NAMESPACE"
+        kubectl create namespace $EPHEMERAL_NAMESPACE || true
+        kubectl apply -n $EPHEMERAL_NAMESPACE -f $K8S_MANIFEST_PATH
+      elif [[ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]]; then
+        echo "🚀 Deploying to staging namespace: $STAGING_NAMESPACE"
+        kubectl apply -n $STAGING_NAMESPACE -f $K8S_MANIFEST_PATH
+      elif [[ -n "$CI_COMMIT_TAG" ]]; then
+        echo "🚀 Deploying to production namespace: $PRODUCTION_NAMESPACE"
+        kubectl apply -n $PRODUCTION_NAMESPACE -f $K8S_MANIFEST_PATH
+      else
+        echo "⏭️  Skipping deployment (ephemeral deployments disabled)"
+      fi
+  needs: $[[ inputs.needs ]]
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'

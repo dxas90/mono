@@ -1,0 +1,159 @@
+spec:
+  inputs:
+    stage:
+      default: containerize
+      description: "Pipeline stage for the containerize job"
+    job_name:
+      default: "containerize"
+      description: "Name of the containerization job"
+    dockerfile_path:
+      default: ""
+      description: "Path to Dockerfile (auto-detected if not specified)"
+    containerfile_path:
+      default: ""
+      description: "Path to Containerfile (alternative to Dockerfile)"
+    build_context:
+      default: "$CI_PROJECT_DIR"
+      description: "Build context directory"
+    image_repository:
+      default: "$CI_REGISTRY_IMAGE"
+      description: "Container image repository"
+    registry:
+      default: "$CI_REGISTRY"
+      description: "Container registry URL"
+    registry_user:
+      default: "$CI_REGISTRY_USER"
+      description: "Registry username"
+    registry_password:
+      default: "$CI_REGISTRY_PASSWORD"
+      description: "Registry password"
+    buildah_args:
+      default: ""
+      description: "Additional arguments for buildah bud command"
+    storage_driver:
+      default: "vfs"
+      description: "Buildah storage driver"
+    buildah_format:
+      default: "docker"
+      description: "Image format (docker or oci)"
+    buildah_isolation:
+      default: "chroot"
+      description: "Buildah isolation mode (chroot or rootless)"
+    tls_verify:
+      default: "true"
+      description: "Enable TLS verification (disable only in private networks)"
+    no_push:
+      default: ""
+      description: "Skip pushing image to registry if set"
+    needs:
+      default: []
+      description: "Job dependencies"
+    rules:
+      default: []
+      description: "Custom rules for when to run this job"
+    npmrc_token:
+      default: "$NPM_TOKEN"
+      description: "NPM authentication token for GitLab packages"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: quay.io/buildah/stable:latest
+  variables:
+    STORAGE_DRIVER: $[[ inputs.storage_driver ]]
+    BUILDAH_FORMAT: $[[ inputs.buildah_format ]]
+    BUILDAH_ISOLATION: $[[ inputs.buildah_isolation ]]
+    BUILDAH_ARGS: $[[ inputs.buildah_args ]]
+    BUILD_CONTEXT: $[[ inputs.build_context ]]
+    REGISTRY: $[[ inputs.registry ]]
+    REGISTRY_USER: $[[ inputs.registry_user ]]
+    REGISTRY_PASSWORD: $[[ inputs.registry_password ]]
+    IMAGE_REPOSITORY: $[[ inputs.image_repository ]]
+    DOCKERFILE_PATH: $[[ inputs.dockerfile_path ]]
+    CONTAINERFILE_PATH: $[[ inputs.containerfile_path ]]
+    TLS_VERIFY: $[[ inputs.tls_verify ]]
+    NO_PUSH: $[[ inputs.no_push ]]
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 30 mins
+  before_script:
+    - touch build.env || true && source build.env
+    # Generate .npmrc for GitLab NPM registry if not present
+    - |
+      if [[ ! -f .npmrc && -n "$[[ inputs.npmrc_token ]]" ]]; then
+        echo "Generating .npmrc for GitLab NPM registry"
+        {
+          echo "@${CI_PROJECT_ROOT_NAMESPACE}:registry=${CI_API_V4_URL}/packages/npm/"
+          echo "${CI_API_V4_URL#http*:}/packages/npm/:_authToken=$[[ inputs.npmrc_token ]]"
+        } >> .npmrc
+      fi
+    - touch build.env
+    - echo "nameserver 1.1.1.1" > /etc/resolv.conf
+    - dnf install curl -y
+  script:
+    # Locate Dockerfile / Containerfile
+    - |
+      if [ -z "$DOCKERFILE_PATH" ]; then
+        if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Dockerfile"
+        elif [ -n "$CONTAINERFILE_PATH" ]; then
+          DOCKERFILE_PATH="$CONTAINERFILE_PATH"
+        elif [ -f "$BUILD_CONTEXT/Containerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Containerfile"
+        else
+          echo "ERROR -> No Dockerfile or Containerfile found in build context"
+          exit 1
+        fi
+      fi
+    - echo "Using Dockerfile -> $DOCKERFILE_PATH"
+
+    # Determine image tag
+    - |
+      if [ -z "${IMAGE_TAG+x}" ]; then
+        if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
+          VERSION="latest"
+        elif [ -n "$CI_COMMIT_TAG" ]; then
+          NOSLASH=$(echo "$CI_COMMIT_TAG" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9.-]/}"
+          VERSION="$SANITIZED"
+        else
+          NOSLASH=$(echo "$CI_COMMIT_REF_NAME" | tr -s / -)
+          SANITIZED="${NOSLASH//[^a-zA-Z0-9-]/}"
+          VERSION="branch-$SANITIZED"
+        fi
+        export IMAGE_TAG="$IMAGE_REPOSITORY:$VERSION"
+      fi
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
+    - echo "Building image -> $IMAGE_TAG"
+
+    # Configure isolation
+    - |
+      if [ "$BUILDAH_ISOLATION" = "rootless" ]; then
+        export BUILDAH_ISOLATION=rootless
+        export STORAGE_DRIVER=vfs
+      fi
+
+    # Login to registry
+    - echo "$REGISTRY_PASSWORD" | buildah login -u "$REGISTRY_USER" --password-stdin "$REGISTRY"
+
+    # Build image
+    - |
+      buildah bud \
+        --isolation="$BUILDAH_ISOLATION" \
+        --storage-driver="$STORAGE_DRIVER" \
+        --format="$BUILDAH_FORMAT" \
+        --tls-verify=$TLS_VERIFY \
+        -f "$DOCKERFILE_PATH" \
+        -t "$IMAGE_TAG" $BUILDAH_ARGS \
+        "$BUILD_CONTEXT"
+
+    # Push image
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing image to registry..."
+        buildah push "$IMAGE_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  needs: $[[ inputs.needs ]]
+  rules: $[[ inputs.rules | length > 0 && inputs.rules || [{"exists": ["Dockerfile", "Containerfile"]}, {"if": "$DOCKERFILE_PATH"}, {"if": "$CONTAINERFILE_PATH"}] ]]

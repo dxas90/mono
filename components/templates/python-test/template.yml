@@ -1,0 +1,89 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: "Pipeline stage for the test job"
+    job_name:
+      default: "python-test"
+      description: "Name of the test job"
+    python_image:
+      default: "python:3.12"
+      description: "Python Docker image"
+    requirements_file:
+      default: "requirements.txt"
+      description: "Path to requirements.txt"
+    test_command:
+      default: "pytest"
+      description: "Test command to run"
+    allow_test_failure:
+      default: "false"
+      description: "Continue pipeline even if tests fail"
+    enable_cache:
+      default: "true"
+      description: "Enable dependency caching for faster builds"
+    cache_key:
+      default: "$CI_COMMIT_REF_SLUG"
+      description: "Cache key for dependencies"
+    cache_paths:
+      default: [".venv/", "~/.cache/pip/"]
+      description: "Paths to cache"
+    cache_policy:
+      default: "pull-push"
+      description: "Cache policy (pull-push, pull, push)"
+    enable_test_report:
+      default: "false"
+      description: "Enable JUnit test report generation"
+    test_report_path:
+      default: "test-report.xml"
+      description: "Path to JUnit XML test report"
+    enable_coverage:
+      default: "false"
+      description: "Enable coverage report generation"
+    coverage_path:
+      default: "coverage.xml"
+      description: "Path to coverage report (Cobertura XML)"
+    coverage_format:
+      default: "cobertura"
+      description: "Coverage report format (cobertura)"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.python_image ]]
+  cache:
+    key: $[[ inputs.cache_key ]]
+    paths: $[[ inputs.cache_paths ]]
+    policy: $[[ inputs.cache_policy ]]
+    when: $[[ inputs.enable_cache == "true" && "on_success" || "never" ]]
+  artifacts:
+    when: always
+    reports:
+      junit: $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      coverage_report:
+        coverage_format: $[[ inputs.coverage_format ]]
+        path: $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    paths:
+      - $[[ inputs.enable_coverage == "true" && "htmlcov/" || "" ]]
+      - $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      - $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    expire_in: 30 days
+  before_script:
+    - echo "🐍 Installing Python dependencies..."
+    - pip install --upgrade pip
+    - |
+      if [ -f "$[[ inputs.requirements_file ]]" ]; then
+        pip install -r $[[ inputs.requirements_file ]]
+      else
+        echo "No requirements.txt found, skipping dependency installation"
+      fi
+  script:
+    - echo "🧪 Running Python tests..."
+    - |
+      if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+        $[[ inputs.test_command ]] || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+      else
+        $[[ inputs.test_command ]]
+      fi
+  needs: $[[ inputs.needs ]]

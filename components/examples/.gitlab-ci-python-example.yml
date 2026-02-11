@@ -1,0 +1,37 @@
+# Example: Python Application Pipeline
+
+# Using components from the catalog
+include:
+  - component: $CI_SERVER_FQDN/<your-group>/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-python-app
+      python_image: python:3.12
+      requirements_file: requirements.txt
+      test_command: pytest
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: containerize
+      job_name: build-image
+      image_repository: $CI_REGISTRY_IMAGE
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/image-promote@1.0.0
+    inputs:
+      stage: promote
+      job_name: promote-to-production
+      target_tag: production
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      job_name: deploy-app
+      k8s_manifest_path: k8s/deployment.yaml
+      staging_namespace: staging
+      production_namespace: production
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy

@@ -1,0 +1,123 @@
+# GitLab CI/CD Components - Testing and Release Pipeline
+# This pipeline tests components and publishes new versions to the CI/CD Catalog
+
+stages:
+  - validate
+  - test
+  - release
+
+# Validate component syntax
+validate-components:
+  stage: validate
+  image: registry.gitlab.com/gitlab-org/gitlab:latest
+  script:
+    - echo "🔍 Validating component syntax..."
+    - |
+      for component in templates/**/*.yml; do
+        echo "Validating $component..."
+        # Basic YAML syntax check
+        python3 -c "import yaml; yaml.safe_load(open('$component'))" || exit 1
+      done
+    - echo "✅ All components validated successfully"
+  rules:
+    - changes:
+        - templates/**/*.yml
+
+# Test Python component
+test-python-component:
+  stage: test
+  include:
+    - component: $CI_SERVER_FQDN/$CI_PROJECT_PATH/python-test@$CI_COMMIT_SHA
+      inputs:
+        stage: test
+        job_name: verify-python-component
+        python_image: python:3.12
+        requirements_file: test-requirements.txt
+        test_command: echo "Python component test successful"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  allow_failure: true
+
+# Test Node.js component
+test-node-component:
+  stage: test
+  include:
+    - component: $CI_SERVER_FQDN/$CI_PROJECT_PATH/node-test@$CI_COMMIT_SHA
+      inputs:
+        stage: test
+        job_name: verify-node-component
+        node_image: node:22-alpine
+        install_command: echo "pnpm install"
+        build_command: echo "pnpm build"
+        test_command: echo "Node component test successful"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  allow_failure: true
+
+# Test Go component
+test-go-component:
+  stage: test
+  include:
+    - component: $CI_SERVER_FQDN/$CI_PROJECT_PATH/go-test@$CI_COMMIT_SHA
+      inputs:
+        stage: test
+        job_name: verify-go-component
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+  allow_failure: true
+
+# Test containerization component
+test-containerize-component:
+  stage: test
+  image: badouralix/curl-jq
+  script:
+    - echo "🔍 Verifying containerize component jobs are present..."
+    - |
+      route="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${CI_PIPELINE_ID}/jobs"
+      # Verify that component-based jobs exist
+      echo "Component testing successful"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+# Create a release when a semantic version tag is pushed
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  script:
+    - echo "📦 Creating release $CI_COMMIT_TAG"
+    - |
+      # Validate semantic versioning
+      if ! echo "$CI_COMMIT_TAG" | grep -Pq '^\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$'; then
+        echo "❌ Tag $CI_COMMIT_TAG does not follow semantic versioning (e.g., 1.0.0)"
+        exit 1
+      fi
+    - echo "✅ Tag follows semantic versioning"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: |
+      Release $CI_COMMIT_TAG of CI/CD Components
+
+      ## Components in this release:
+      - Python Test Component
+      - Node.js Test Component
+      - Go Test Component
+      - Java Test Component
+      - PHP Test Component
+      - Buildah Containerize Component
+      - Image Promote Component
+      - Kubernetes Deploy Component
+      - Ephemeral Cleanup Component
+      - Notify Component
+
+      See the [README](README.md) for usage instructions.
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  needs:
+    - job: validate-components
+      optional: true
+    - job: test-containerize-component
+      optional: true

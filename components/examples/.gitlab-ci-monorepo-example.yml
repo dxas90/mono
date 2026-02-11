@@ -1,0 +1,57 @@
+# Example: Multi-language Monorepo Pipeline
+
+include:
+  # Python app
+  - component: $CI_SERVER_FQDN/<your-group>/components/python-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-python-service
+
+  # Node.js app
+  - component: $CI_SERVER_FQDN/<your-group>/components/node-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-node-service
+
+  # Go app
+  - component: $CI_SERVER_FQDN/<your-group>/components/go-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-go-service
+
+  # Build all services
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-python-image
+      build_context: ./apps/python-service
+      image_repository: $CI_REGISTRY_IMAGE/python-service
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-node-image
+      build_context: ./apps/node-service
+      image_repository: $CI_REGISTRY_IMAGE/node-service
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: build-go-image
+      build_context: ./apps/go-service
+      image_repository: $CI_REGISTRY_IMAGE/go-service
+
+stages:
+  - test
+  - build
+  - deploy
+
+# Custom deployment logic
+deploy-services:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - echo "Deploying all services to Kubernetes..."
+    - kubectl apply -f k8s/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

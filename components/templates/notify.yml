@@ -1,0 +1,25 @@
+spec:
+  inputs:
+    stage:
+      default: notify
+      description: "Pipeline stage for the notify job"
+    job_name:
+      default: "notify"
+      description: "Name of the notification job"
+    message:
+      default: "Pipeline notification"
+      description: "Notification message"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: bash
+  script:
+    - echo "$[[ inputs.message ]]"
+    - echo "Notify stakeholders using Slack/Mattermost/RocketChat/MSTeams..."
+    - echo "Add your notification integration here"
+  needs: $[[ inputs.needs ]]
+  when: manual
+  allow_failure: true

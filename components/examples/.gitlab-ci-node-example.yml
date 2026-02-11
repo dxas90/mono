@@ -1,0 +1,28 @@
+# Example: Node.js Application Pipeline
+
+include:
+  - component: $CI_SERVER_FQDN/<your-group>/components/node-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-node-app
+      node_image: node:22-alpine
+      pnpm_version: "10.18.1"
+      install_command: pnpm install --frozen-lockfile
+      build_command: pnpm build
+      test_command: pnpm test
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: build
+      job_name: containerize-app
+      dockerfile_path: Dockerfile
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+      enable_ephemeral: "true"
+
+stages:
+  - test
+  - build
+  - deploy

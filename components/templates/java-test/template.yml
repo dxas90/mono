@@ -1,0 +1,94 @@
+spec:
+  inputs:
+    stage:
+      default: test
+      description: "Pipeline stage for the test job"
+    job_name:
+      default: "java-test"
+      description: "Name of the test job"
+    java_image:
+      default: "eclipse-temurin:21-jdk"
+      description: "Java JDK Docker image"
+    build_tool:
+      default: "auto"
+      description: "Build tool to use (auto, maven, gradle)"
+    maven_command:
+      default: "./mvnw clean test"
+      description: "Maven test command"
+    gradle_command:
+      default: "./gradlew test"
+      description: "Gradle test command"
+    allow_test_failure:
+      default: "false"
+      description: "Continue pipeline even if tests fail"
+    enable_cache:
+      default: "true"
+      description: "Enable dependency caching for faster builds"
+    cache_key:
+      default: "$CI_COMMIT_REF_SLUG"
+      description: "Cache key for dependencies"
+    cache_paths:
+      default: [".m2/repository/", ".gradle/"]
+      description: "Paths to cache"
+    cache_policy:
+      default: "pull-push"
+      description: "Cache policy (pull-push, pull, push)"
+    enable_test_report:
+      default: "false"
+      description: "Enable JUnit test report generation"
+    test_report_path:
+      default: "target/surefire-reports/TEST-*.xml"
+      description: "Path to JUnit XML test reports (Maven/Gradle)"
+    enable_coverage:
+      default: "false"
+      description: "Enable coverage report generation (requires Jacoco)"
+    coverage_path:
+      default: "target/site/jacoco/jacoco.xml"
+      description: "Path to coverage report (Jacoco XML format)"
+    coverage_format:
+      default: "jacoco"
+      description: "Coverage report format (jacoco or cobertura)"
+    needs:
+      default: []
+      description: "Job dependencies"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.java_image ]]
+  cache:
+    key: $[[ inputs.cache_key ]]
+    paths: $[[ inputs.cache_paths ]]
+    policy: $[[ inputs.cache_policy ]]
+    when: $[[ inputs.enable_cache == "true" && "on_success" || "never" ]]
+  before_script:
+    - echo "☕ Setting up Java environment..."
+  script:
+    - echo "🧪 Running Java tests..."
+    - |
+      if [ "$[[ inputs.build_tool ]]" = "maven" ] || ([ "$[[ inputs.build_tool ]]" = "auto" ] && [ -f "./mvnw" ]); then
+        if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+          $[[ inputs.maven_command ]] || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+        else
+          $[[ inputs.maven_command ]]
+        fi
+      elif [ "$[[ inputs.build_tool ]]" = "gradle" ] || ([ "$[[ inputs.build_tool ]]" = "auto" ] && [ -f "./gradlew" ]); then
+        if [ "$[[ inputs.allow_test_failure ]]" == "true" ]; then
+          $[[ inputs.gradle_command ]] || echo "⚠️  Tests failed but continuing (allow_test_failure=true)..."
+        else
+          $[[ inputs.gradle_command ]]
+        fi
+      else
+        echo "❌ ERROR: No supported build tool found (Maven or Gradle)"
+        exit 1
+      fi
+  needs: $[[ inputs.needs ]]
+  artifacts:
+    when: always
+    reports:
+      junit: $[[ inputs.enable_test_report == "true" && inputs.test_report_path || "" ]]
+      coverage_report:
+        coverage_format: $[[ inputs.coverage_format ]]
+        path: $[[ inputs.enable_coverage == "true" && inputs.coverage_path || "" ]]
+    paths:
+      - $[[ inputs.enable_coverage == "true" && "target/site/jacoco/" || "" ]]
+    expire_in: 30 days

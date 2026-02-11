@@ -1,0 +1,31 @@
+# Example: Go Application Pipeline
+
+include:
+  - component: $CI_SERVER_FQDN/<your-group>/components/go-test@1.0.0
+    inputs:
+      stage: test
+      job_name: test-go-app
+      go_image: golang:1.25
+      build_flags: "-v"
+      test_flags: "-v -race -coverprofile=coverage.out"
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+    inputs:
+      stage: containerize
+      job_name: build-go-image
+      buildah_args: "--build-arg CGO_ENABLED=0"
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/image-promote@1.0.0
+    inputs:
+      stage: promote
+      target_tag: stable
+
+  - component: $CI_SERVER_FQDN/<your-group>/components/k8s-deploy@1.0.0
+    inputs:
+      stage: deploy
+
+stages:
+  - test
+  - containerize
+  - promote
+  - deploy

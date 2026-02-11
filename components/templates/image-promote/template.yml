@@ -1,0 +1,88 @@
+spec:
+  inputs:
+    stage:
+      default: promote
+      description: "Pipeline stage for the promote job"
+    job_name:
+      default: "promote-image"
+      description: "Name of the promotion job"
+    source_tag:
+      default: "$IMAGE_TAG"
+      description: "Source image tag to promote"
+    target_tag:
+      default: "$PROMOTE_TAG"
+      description: "Target tag for promoted image"
+    image_repository:
+      default: "$CI_REGISTRY_IMAGE"
+      description: "Container image repository"
+    registry:
+      default: "$CI_REGISTRY"
+      description: "Container registry URL"
+    registry_user:
+      default: "$CI_REGISTRY_USER"
+      description: "Registry username"
+    registry_password:
+      default: "$CI_REGISTRY_PASSWORD"
+      description: "Registry password"
+    no_push:
+      default: ""
+      description: "Skip pushing image to registry if set"
+    needs:
+      default: []
+      description: "Job dependencies"
+    rules:
+      default:
+        - if: '$PROMOTE_TAG'
+      description: "Custom rules for when to run this job"
+---
+"$[[ inputs.job_name ]]":
+  stage: $[[ inputs.stage ]]
+  image: quay.io/buildah/stable:latest
+  variables:
+    REGISTRY: $[[ inputs.registry ]]
+    REGISTRY_USER: $[[ inputs.registry_user ]]
+    REGISTRY_PASSWORD: $[[ inputs.registry_password ]]
+    IMAGE_REPOSITORY: $[[ inputs.image_repository ]]
+    SOURCE_TAG: $[[ inputs.source_tag ]]
+    TARGET_TAG: $[[ inputs.target_tag ]]
+    NO_PUSH: $[[ inputs.no_push ]]
+  artifacts:
+    reports:
+      dotenv: buildah-promotion.env
+    expire_in: 1 hour
+  before_script:
+    - touch build.env || true && source build.env
+  script:
+    # Validate inputs
+    - |
+      if [ -z "$SOURCE_TAG" ]; then
+        echo "ERROR: SOURCE_TAG (built image) is not set."
+        exit 1
+      fi
+      if [ -z "$TARGET_TAG" ]; then
+        echo "ERROR: TARGET_TAG (promotion tag) is not set."
+        exit 1
+      fi
+
+    # Login to registry
+    - echo "$REGISTRY_PASSWORD" | buildah login -u "$REGISTRY_USER" --password-stdin "$REGISTRY"
+
+    # Pull, tag, and promote
+    - echo "Promoting image $SOURCE_TAG to $IMAGE_REPOSITORY:$TARGET_TAG"
+    - buildah pull "$SOURCE_TAG"
+    - buildah tag "$SOURCE_TAG" "$IMAGE_REPOSITORY:$TARGET_TAG"
+
+    # Export promoted image info
+    - touch buildah-promotion.env
+    - echo "PROMOTED_IMAGE=$IMAGE_REPOSITORY:$TARGET_TAG" >> buildah-promotion.env
+
+    # Push promoted image
+    - |
+      if [ -z "$NO_PUSH" ]; then
+        echo "Pushing promoted image to registry..."
+        buildah push "$IMAGE_REPOSITORY:$TARGET_TAG"
+      else
+        echo "Skipping push (NO_PUSH defined)"
+      fi
+  needs: $[[ inputs.needs ]]
+  rules: $[[ inputs.rules ]]
