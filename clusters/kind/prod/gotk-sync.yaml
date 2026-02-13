@@ -1,0 +1,14 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: mono-learn-prod
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  path: ./clusters/kind/prod
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: mono-learn
+    namespace: flux-system
