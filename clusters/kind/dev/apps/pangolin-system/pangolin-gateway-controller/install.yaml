@@ -31,7 +31,7 @@ spec:
   targetNamespace: pangolin-system
   sourceRef:
     kind: GitRepository
-    name: pangolin-gateway-controller
+    name: mono-learn
     namespace: flux-system
   wait: true
   interval: 1m
