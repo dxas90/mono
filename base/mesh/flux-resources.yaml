@@ -1,0 +1,51 @@
+---
+# yaml-language-server: $schema=https://homelab-schemas-epg.pages.dev/source.toolkit.fluxcd.io/gitrepository_v1.json
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: learn-mesh
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: https://github.com/dxas90/mesh.git
+  ref:
+    branch: main
+  ignore: |
+    # exclude
+    /*
+    # include
+    !k8s/
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/helmrelease-helm-v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: learn-mesh
+  namespace: flux-system
+spec:
+  interval: 30m
+  targetNamespace: default
+  chart:
+    spec:
+      chart: ./k8s/chart
+      sourceRef:
+        kind: GitRepository
+        name: learn-mesh
+        namespace: flux-system
+  maxHistory: 2
+  install:
+    createNamespace: true
+    remediation:
+      retries: -1
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  uninstall:
+    keepHistory: false
+  values:
+    image:
+      repository: "ghcr.io/dxas90/mesh"
+    env:
+      variables:
+        VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"

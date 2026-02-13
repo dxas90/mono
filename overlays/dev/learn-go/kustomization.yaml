@@ -8,10 +8,6 @@ patches:
       - op: replace
         path: /spec/values/image/tag
         value: "0.1.0"
-    target:
-      kind: HelmRelease
-      name: learn-go
-  - patch: |-
       - op: replace
         path: /spec/targetNamespace
         value: "learn-dev"

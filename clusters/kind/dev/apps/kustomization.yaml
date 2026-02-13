@@ -4,3 +4,7 @@ kind: Kustomization
 resources:
   - ./namespace.yaml
   - ../../../../overlays/dev/learn-go
+  - ../../../../overlays/dev/learn-python
+  - ../../../../overlays/dev/learn-rust
+  - ../../../../overlays/dev/ui
+  - ../../../../overlays/dev/mesh
