@@ -11,3 +11,10 @@ patches:
     target:
       kind: HelmRelease
       name: learn-go
+  - patch: |-
+      - op: add
+        path: /spec/targetNamespace
+        value: "learn-dev"
+    target:
+      kind: HelmRelease
+      name: learn-go
