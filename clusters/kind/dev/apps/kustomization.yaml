@@ -8,9 +8,9 @@ resources:
   - ../../../../overlays/dev/learn-rust
   - ../../../../overlays/dev/ui
   - ../../../../overlays/dev/mesh
-  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/deployment.yaml
-  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/rbac.yaml
-  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/gatewayclass.yaml
+  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/heads/main/config/deployment.yaml
+  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/heads/main/config/rbac.yaml
+  - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/heads/main/config/gatewayclass.yaml
 patches:
   - patch: |-
       - op: replace
