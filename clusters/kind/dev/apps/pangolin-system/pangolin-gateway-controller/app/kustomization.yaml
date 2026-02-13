@@ -5,3 +5,4 @@ transformers:
   - labels.yaml
 resources:
   - ./helmrelease.yaml
+  - ./secret.sops.yaml

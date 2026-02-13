@@ -121,5 +121,6 @@ patches:
       kind: Deployment
       name: (helm-controller|kustomize-controller)
 
-# kubectl apply -k .
+# kubectl apply --kustomize bootstrap
 # kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yaml
+# sops exec-file "bootstrap/sops-age.sops.yaml" "kubectl --namespace flux-system apply --server-side --filename {}"
