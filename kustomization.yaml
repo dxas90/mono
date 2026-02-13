@@ -121,4 +121,5 @@ patches:
       kind: Deployment
       name: (helm-controller|kustomize-controller)
 
+# kubectl apply -k .
 # kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yaml

@@ -18,6 +18,7 @@ stages:
   - push
   - test
   - deploy
+  - release
 
 variables:
   IMAGE_NAME: "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
@@ -114,3 +115,14 @@ deploy_production:
     - echo "🏷️ Tag detected -> $CI_COMMIT_TAG"
     - echo "🚀 Deploying image $IMAGE_NAME to production namespace $PRODUCTION_NAMESPACE"
     - echo "kubectl apply -n $PRODUCTION_NAMESPACE -f k8s/deployment.yaml"
+
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - echo "Creating release $CI_COMMIT_TAG"
+  rules:
+    - if: $CI_COMMIT_TAG
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: "Release $CI_COMMIT_TAG"
