@@ -1,0 +1,12 @@
+[submodule "apps/learn-rust"]
+	path = apps/learn-rust
+	url = https://github.com/dxas90/learn-rust.git
+[submodule "apps/learn-python"]
+	path = apps/learn-python
+	url = https://github.com/dxas90/learn-python.git
+[submodule "apps/learn-go"]
+	path = apps/learn-go
+	url = https://github.com/dxas90/learn-go.git
+[submodule "apps/mesh"]
+	path = apps/mesh
+	url = https://github.com/dxas90/mesh.git
