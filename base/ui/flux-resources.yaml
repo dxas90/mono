@@ -27,7 +27,7 @@ spec:
   targetNamespace: default
   chart:
     spec:
-      chart: ./k8s/chart
+      chart: ./k8s/learn-ui
       sourceRef:
         kind: GitRepository
         name: learn-ui

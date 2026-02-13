@@ -11,6 +11,9 @@ patches:
       - op: replace
         path: /spec/targetNamespace
         value: "learn-dev"
+      - op: replace
+        path: /metadata/namespace
+        value: "learn-dev"
     target:
       kind: HelmRelease
       name: learn-rust
