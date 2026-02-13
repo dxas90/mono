@@ -47,6 +47,7 @@ spec:
     image:
       repository: "ghcr.io/dxas90/mesh"
     fullnameOverride: "learn-mesh"
-    env:
-      variables:
-        VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"
+    extraEnv:
+      LEARN_GO_SERVICE_URL: "http://learn-go:8080"
+      LEARN_PYTHON_SERVICE_URL: "http://learn-python:8000"
+      LEARN_RUST_SERVICE_URL: "http://learn-rust:8080"
