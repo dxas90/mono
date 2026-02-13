@@ -16,17 +16,17 @@ This folder contains the minimal manifests required to bootstrap a Kubernetes cl
 kubectl apply --kustomize bootstrap
 ```
 
-1. Apply the Flux sync manifests for your cluster profile (example for kind + dev):
-
-```bash
-kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yaml
-```
-
 1. Decrypt and apply the SOPS age secret used by Flux:
 
 ```bash
 sops exec-file "bootstrap/sops-age.sops.yaml" \
  "kubectl --namespace flux-system apply --server-side --filename {}"
+```
+
+1. Apply the Flux sync manifests for your cluster profile (example for kind + dev):
+
+```bash
+kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yaml
 ```
 
 ## Notes
