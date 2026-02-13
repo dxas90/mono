@@ -11,3 +11,11 @@ resources:
   - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/deployment.yaml
   - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/rbac.yaml
   - https://raw.githubusercontent.com/dxas90/pangolin-gateway-controller/refs/tags/v0.2.0/config/gatewayclass.yaml
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: "ghcr.io/dxas90/pangolin-gateway-controller:0.2.0"
+    target:
+      kind: Deployment
+      name: pangolin-gateway-controller
