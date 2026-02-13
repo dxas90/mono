@@ -20,9 +20,16 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m0s
-  path: ./overlays/dev
+  path: ./clusters/kind/dev/apps
   prune: true
   sourceRef:
     kind: GitRepository
     name: mono-learn
     namespace: flux-system
+  postBuild:
+    substitute:
+      NAMESPACE: learn-dev
+      ENV_SUFFIX: dev
+      CLUSTER: kind-dev
+      ENVIRONMENT: dev
+      AWS_REGION: us-east-1

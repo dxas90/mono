@@ -5,3 +5,11 @@ transformers:
   - labels.yaml
 resources:
   - ../../../base/learn-go/app
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/values/image/tag
+        value: "v0.1.0"
+    target:
+      kind: HelmRelease
+      name: learn-go

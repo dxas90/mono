@@ -24,7 +24,7 @@ spec:
       retries: 3
   uninstall:
     keepHistory: false
-  values: # https://github.com/external-secrets/external-secrets/blob/main/deploy/charts/external-secrets/values.yaml
+  values:
     image:
       repository: "ghcr.io/dxas90/learn-go"
     env:
