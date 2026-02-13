@@ -1,70 +1,50 @@
-# CI/CD Components Library
+# GitLab CI/CD Templates
 
-A collection of reusable GitLab CI/CD components for building, testing, and deploying applications in a monorepo environment.
+Reusable GitLab CI/CD components for testing, building, and deploying apps in this monorepo.
 
 ## Components
 
-This project provides the following components:
+Build and test:
 
-### Build & Test Components
+- [templates/python-test](python-test/README.md)
+- [templates/node-test](node-test/README.md)
+- [templates/go-test](go-test/README.md)
+- [templates/java-test](java-test/README.md)
+- [templates/php-test](php-test/README.md)
 
-- **[Python Test](python-test/)** - Test Python applications with pip/pytest
-- **[Node.js Test](node-test/)** - Test Node.js applications with pnpm
-- **[Go Test](go-test/)** - Test Go applications
-- **[Java Test](java-test/)** - Test Java applications with Maven/Gradle
-- **[PHP Test](php-test/)** - Test PHP applications with Composer/PHPUnit
+Container and deploy:
 
-### Container Components
-
-- **[Buildah Containerize](buildah-containerize/)** - Build and push container images using Buildah
-- **[Image Promote](image-promote/)** - Promote container images between tags
-
-### Deployment Components
-
-- **[Kubernetes Deploy](k8s-deploy/)** - Deploy applications to Kubernetes with environment-based routing
-- **[Ephemeral Cleanup](ephemeral-cleanup/)** - Clean up ephemeral environments
-
-### Utility Components
-
-- **[Notify](notify.yml)** - Send notifications (placeholder for Slack/Teams/etc)
+- [templates/buildah-containerize](buildah-containerize/README.md)
+- [templates/image-promote](image-promote/README.md)
+- [templates/k8s-deploy](k8s-deploy/README.md)
+- [templates/ephemeral-cleanup](ephemeral-cleanup/README.md)
 
 ## Usage
 
-To use a component from this library, include it in your `.gitlab-ci.yml`:
+Include a component in an app pipeline:
 
 ```yaml
 include:
-  - component: $CI_SERVER_FQDN/<your-group>/<your-project>/buildah-containerize@1.0.0
+  - component: $CI_SERVER_FQDN/your-group/mono-learn/templates/python-test@1.0.0
     inputs:
-      stage: build
-      dockerfile_path: Dockerfile
-      image_repository: $CI_REGISTRY_IMAGE
+      stage: test
+      job_name: test-python
 
-stages: [test, build, deploy]
+stages:
+  - test
 ```
 
-### Version Selection
+## Versioning
 
-- Use specific versions: `@1.0.0` (recommended)
-- Use partial versions: `@1.0` (latest 1.0.x)
-- Use major version: `@1` (latest 1.x.x)
-- Use latest: `@~latest` (not recommended for production)
-
-## Best Practices
-
-1. **Pin to specific versions** in production pipelines
-2. **Use semantic versioning** when releasing components
-3. **Test components** before releasing new versions
-4. **Review component source** before using in your pipelines
-5. **Use minimal permissions** for tokens and credentials
+- Pin exact versions in production pipelines.
+- Use semantic versioning for releases.
 
 ## Contributing
 
-1. Make changes to components in the `templates/` directory
-2. Test your changes using the component CI pipeline
-3. Create a merge request with your changes
-4. Once merged, create a new release tag with semantic versioning
+- Update component templates in their folders.
+- Add or update the component README for new inputs or behavior.
+- Tag a release after changes are merged.
 
 ## License
 
-MIT License - See [LICENSE.md](docs/LICENSE.md) for details
+Apache 2.0. See [docs/LICENSE.md](docs/LICENSE.md).

@@ -33,3 +33,9 @@ kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yam
 
 - Keep `sops-age.sops.yaml` encrypted at rest; only apply it through `sops`.
 - Run `flux check` and `flux get kustomizations --all-namespaces` to verify reconciliation.
+
+## Related
+
+- [clusters/README.md](../clusters/README.md)
+- [base/README.md](../base/README.md)
+- [overlays/README.md](../overlays/README.md)
