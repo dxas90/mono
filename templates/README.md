@@ -8,25 +8,25 @@ This project provides the following components:
 
 ### Build & Test Components
 
-- **[Python Test](templates/python-test/)** - Test Python applications with pip/pytest
-- **[Node.js Test](templates/node-test/)** - Test Node.js applications with pnpm
-- **[Go Test](templates/go-test/)** - Test Go applications
-- **[Java Test](templates/java-test/)** - Test Java applications with Maven/Gradle
-- **[PHP Test](templates/php-test/)** - Test PHP applications with Composer/PHPUnit
+- **[Python Test](python-test/)** - Test Python applications with pip/pytest
+- **[Node.js Test](node-test/)** - Test Node.js applications with pnpm
+- **[Go Test](go-test/)** - Test Go applications
+- **[Java Test](java-test/)** - Test Java applications with Maven/Gradle
+- **[PHP Test](php-test/)** - Test PHP applications with Composer/PHPUnit
 
 ### Container Components
 
-- **[Buildah Containerize](templates/buildah-containerize/)** - Build and push container images using Buildah
-- **[Image Promote](templates/image-promote/)** - Promote container images between tags
+- **[Buildah Containerize](buildah-containerize/)** - Build and push container images using Buildah
+- **[Image Promote](image-promote/)** - Promote container images between tags
 
 ### Deployment Components
 
-- **[Kubernetes Deploy](templates/k8s-deploy/)** - Deploy applications to Kubernetes with environment-based routing
-- **[Ephemeral Cleanup](templates/ephemeral-cleanup/)** - Clean up ephemeral environments
+- **[Kubernetes Deploy](k8s-deploy/)** - Deploy applications to Kubernetes with environment-based routing
+- **[Ephemeral Cleanup](ephemeral-cleanup/)** - Clean up ephemeral environments
 
 ### Utility Components
 
-- **[Notify](templates/notify/)** - Send notifications (placeholder for Slack/Teams/etc)
+- **[Notify](notify.yml)** - Send notifications (placeholder for Slack/Teams/etc)
 
 ## Usage
 
@@ -34,7 +34,7 @@ To use a component from this library, include it in your `.gitlab-ci.yml`:
 
 ```yaml
 include:
-  - component: $CI_SERVER_FQDN/<your-group>/components/buildah-containerize@1.0.0
+  - component: $CI_SERVER_FQDN/<your-group>/<your-project>/buildah-containerize@1.0.0
     inputs:
       stage: build
       dockerfile_path: Dockerfile
@@ -67,4 +67,4 @@ stages: [test, build, deploy]
 
 ## License
 
-MIT License - See [LICENSE.md](LICENSE.md) for details
+MIT License - See [LICENSE.md](docs/LICENSE.md) for details
