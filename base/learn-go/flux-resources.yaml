@@ -1,4 +1,21 @@
 ---
+# yaml-language-server: $schema=https://homelab-schemas-epg.pages.dev/source.toolkit.fluxcd.io/gitrepository_v1.json
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: learn-go
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: https://github.com/dxas90/learn-go.git
+  ref:
+    branch: main
+  ignore: |
+    # exclude
+    /*
+    # include
+    !k8s/
+---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/helmrelease-helm-v2.json
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease

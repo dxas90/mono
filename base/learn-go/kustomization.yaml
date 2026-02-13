@@ -4,5 +4,4 @@ kind: Kustomization
 transformers:
   - labels.yaml
 resources:
-  - ./gitrepo.yaml
-  - ./helmrelease.yaml
+  - ./flux-resources.yaml
