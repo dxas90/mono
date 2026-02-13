@@ -46,6 +46,7 @@ spec:
   values:
     image:
       repository: "ghcr.io/dxas90/learn-go"
+    fullnameOverride: "learn-go"
     env:
       variables:
         VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"
