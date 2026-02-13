@@ -5,7 +5,7 @@ This repository is a **production-ready monorepo** containing multiple applicati
 ## 🎯 Key Features
 
 - 🔧 **Reusable CI/CD Components** - Shared, versioned pipeline components
-- 🏗️ **Multi-Language Support** - Python, Node.js, Go, Java, PHP, Ruby
+- 🏗️ **Multi-Language Support** - Python, Go, Rust, TypeScript/Node.js
 - 🚀 **Complete Workflow** - Feature → Staging → Production deployment flow
 - 📦 **Git Submodules** - Isolated application repositories
 - ⚡ **Performance Optimized** - Caching provides 30-70% faster builds
@@ -33,12 +33,11 @@ This repository is a **production-ready monorepo** containing multiple applicati
 ```text
 mono/
 ├── apps/                           # Application submodules
-│   ├── acme-lambda-cloudflare-go/  # Go Lambda function
-│   ├── django-postgresql-gunicorn/ # Django + PostgreSQL
-│   ├── learn/                      # Educational app
-│   ├── network-stats/              # Network monitoring
-│   ├── pg-database-tester/         # PostgreSQL testing tool
-│   └── sinatra-mysql-puma/         # Ruby Sinatra app
+│   ├── learn-go/                   # Go learning application
+│   ├── learn-python/               # Python learning application
+│   ├── learn-rust/                 # Rust learning application
+│   ├── mesh/                       # GraphQL Mesh TypeScript application
+│   └── ui/                         # Frontend UI application (Vanilla JS)
 │
 ├── components/                     # Reusable CI/CD components
 │   ├── templates/
@@ -173,12 +172,11 @@ stages:
 
 | Application | Language | Description | Status |
 | ----------- | -------- | ----------- | ------ |
-| [acme-lambda-cloudflare-go](https://github.com/dxas90/acme-lambda-cloudflare-go.git) | Go | AWS Lambda function for Cloudflare ACME integration | Active |
-| [django-postgresql-gunicorn](https://github.com/dxas90/django-postgresql-gunicorn.git) | Python | Django web app with PostgreSQL & Gunicorn | Active |
-| [learn](https://github.com/dxas90/learn.git) | Various | Educational application for learning | Active |
-| [network-stats](https://github.com/dxas90/network-stats.git) | Various | Network monitoring and statistics dashboard | Active |
-| [pg-database-tester](https://github.com/dxas90/pg-database-tester.git) | Various | PostgreSQL database testing tool | Active |
-| [sinatra-mysql-puma](https://github.com/dxas90/sinatra-mysql-puma.git) | Ruby | Sinatra web app with MySQL & Puma | Active |
+| [learn-go](https://github.com/dxas90/learn-go.git) | Go | Go learning application with REST API, telemetry, and Kubernetes deployment | Active |
+| [learn-python](https://github.com/dxas90/learn-python.git) | Python | Python Flask learning application with testing and container deployment | Active |
+| [learn-rust](https://github.com/dxas90/learn-rust.git) | Rust | Rust learning application with Actix-web framework | Active |
+| [mesh](https://github.com/dxas90/mesh.git) | TypeScript | GraphQL Mesh application for API federation | Active |
+| [ui](https://github.com/dxas90/learn-node-ui.git) | JavaScript | Frontend UI application with vanilla JS, Playwright tests, and Nginx | Active |
 
 ### Adding New Applications
 
@@ -464,13 +462,13 @@ See [`components/WORKFLOW.md`](components/WORKFLOW.md) for detailed workflow gui
 
 ```bash
 # Navigate to submodule
-cd apps/django-postgresql-gunicorn
+cd apps/learn-go
 
 # Create feature branch
 git checkout -b feature/add-api-endpoint
 
 # Make changes
-vim api/views.py
+vim internal/handlers/handlers.go
 
 # Commit and push
 git add .
@@ -481,8 +479,8 @@ git push origin feature/add-api-endpoint
 cd ../..
 
 # Update submodule reference
-git add apps/django-postgresql-gunicorn
-git commit -m "Update django app with new API endpoint"
+git add apps/learn-go
+git commit -m "Update learn-go app with new API endpoint"
 git push origin main
 ```
 
@@ -502,12 +500,12 @@ git push
 
 ```bash
 # Switch to specific branch in submodule
-cd apps/django-postgresql-gunicorn
+cd apps/learn-python
 git checkout develop
 cd ../..
 
 # Update main repo
-git add apps/django-postgresql-gunicorn
+git add apps/learn-python
 git commit -m "Point to develop branch"
 ```
 
@@ -857,5 +855,5 @@ kubectl create secret docker-registry gitlab-registry \
 
 ---
 
-**Last Updated**: 2024-02-11
+**Last Updated**: 2026-02-13
 **Component Version**: 1.0.0

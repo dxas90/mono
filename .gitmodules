@@ -10,3 +10,6 @@
 [submodule "apps/mesh"]
 	path = apps/mesh
 	url = https://github.com/dxas90/mesh.git
+[submodule "apps/ui"]
+	path = apps/ui
+	url = https://github.com/dxas90/learn-node-ui.git
