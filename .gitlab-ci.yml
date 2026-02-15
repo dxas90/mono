@@ -119,6 +119,9 @@ deploy_production:
 create-release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
+  variables:
+    # Disable glab auto-update check to avoid reaching gitlab.com
+    GLAB_CHECK_UPDATE: "false"
   script:
     - echo "Creating release $CI_COMMIT_TAG"
   rules:
