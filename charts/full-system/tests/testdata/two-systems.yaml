@@ -1,0 +1,31 @@
+# Two systems in reverse-alphabetical insertion order to verify sorted rendering.
+# Clears all defaults so only these two are present.
+systems:
+  zebra-app:
+    source:
+      url: https://github.com/example/zebra.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/zebra
+  alpha-app:
+    source:
+      url: https://github.com/example/alpha.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/alpha

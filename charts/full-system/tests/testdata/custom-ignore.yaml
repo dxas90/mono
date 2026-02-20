@@ -1,0 +1,18 @@
+# Single system with custom ignore rules (helm/ and manifests/ instead of k8s/).
+# Clears all defaults.
+systems:
+  my-app:
+    source:
+      url: https://github.com/example/my-app.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !helm/
+        !manifests/
+    helmRelease:
+      targetNamespace: default
+      chart: ./helm/chart
+      values:
+        image:
+          repository: ghcr.io/example/my-app

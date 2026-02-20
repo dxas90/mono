@@ -1,0 +1,16 @@
+# Single system using a non-standard chart path. Clears all defaults.
+systems:
+  my-app:
+    source:
+      url: https://github.com/example/my-app.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./deploy/helm
+      values:
+        image:
+          repository: ghcr.io/example/my-app

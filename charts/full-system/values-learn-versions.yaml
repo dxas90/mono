@@ -1,0 +1,30 @@
+# Default values for full-system.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+systems:
+  learn-go:
+    helmRelease:
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-go"
+  learn-python:
+    helmRelease:
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-python"
+  learn-rust:
+    helmRelease:
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-rust"
+  learn-mesh:
+    helmRelease:
+      values:
+        image:
+          repository: "ghcr.io/dxas90/mesh"
+  learn-ui:
+    helmRelease:
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-node-ui"

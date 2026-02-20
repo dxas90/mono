@@ -1,0 +1,30 @@
+{{- range $name, $system := .Values.systems }}
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: {{ $name }}
+  namespace: flux-system
+spec:
+  interval: 30m
+  targetNamespace: {{ $system.helmRelease.targetNamespace }}
+  chart:
+    spec:
+      chart: {{ $system.helmRelease.chart }}
+      sourceRef:
+        kind: GitRepository
+        name: {{ $name }}
+        namespace: flux-system
+  maxHistory: 2
+  install:
+    createNamespace: true
+    remediation:
+      retries: -1
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  uninstall:
+    keepHistory: false
+  values: {{ toYaml $system.helmRelease.values | nindent 4 }}
+{{- end }}

@@ -1,0 +1,2 @@
+# Override that clears all default systems — used to test the "no resources" case.
+systems: {}

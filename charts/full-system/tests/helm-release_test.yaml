@@ -1,0 +1,519 @@
+suite: HelmRelease resources
+templates:
+  - templates/helm-release.yaml
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Document count
+  # ---------------------------------------------------------------------------
+
+  - it: should render no resources when systems map is empty (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render one HelmRelease per configured system
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  - it: should render exactly one resource for a single system
+    values:
+      - testdata/single-app.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ---------------------------------------------------------------------------
+  # API contract: all documents
+  # ---------------------------------------------------------------------------
+
+  - it: all HelmReleases should use the correct apiVersion
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isAPIVersion:
+          of: helm.toolkit.fluxcd.io/v2
+
+  - it: all HelmReleases should have kind HelmRelease
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isKind:
+          of: HelmRelease
+
+  - it: all HelmReleases should be in the flux-system namespace
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: flux-system
+
+  - it: all HelmReleases should have a 30-minute reconciliation interval
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.interval
+          value: 30m
+
+  - it: all HelmReleases should reference a GitRepository sourceRef
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.kind
+          value: GitRepository
+      - equal:
+          path: spec.chart.spec.sourceRef.namespace
+          value: flux-system
+
+  # ---------------------------------------------------------------------------
+  # Fixed spec values: all documents must share these
+  # ---------------------------------------------------------------------------
+
+  - it: all HelmReleases should keep at most 2 revisions in history
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.maxHistory
+          value: 2
+
+  - it: all HelmReleases should create the target namespace if it does not exist
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.install.createNamespace
+          value: true
+
+  - it: all HelmReleases should retry failed installs indefinitely
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.install.remediation.retries
+          value: -1
+
+  - it: all HelmReleases should clean up on failed upgrades
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.upgrade.cleanupOnFail
+          value: true
+
+  - it: all HelmReleases should retry failed upgrades 3 times
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.upgrade.remediation.retries
+          value: 3
+
+  - it: all HelmReleases should not keep history on uninstall
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.uninstall.keepHistory
+          value: false
+
+  # ---------------------------------------------------------------------------
+  # learn-go (documentIndex: 0 — alphabetical order)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-go should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-go
+
+  - it: learn-go should reference the learn-go GitRepository as source
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-go
+
+  - it: learn-go should deploy to the default namespace
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.targetNamespace
+          value: default
+
+  - it: learn-go should use the correct chart path
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.chart.spec.chart
+          value: ./k8s/chart
+
+  - it: learn-go values should use the correct image repository
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/dxas90/learn-go
+
+  - it: learn-go values should set fullnameOverride
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.values.fullnameOverride
+          value: learn-go
+
+  - it: learn-go values should declare env variable names
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.values.env.variables.VARIABLES_THAT_SHOULD_BE_PRINTED
+          pattern: "LOG_LEVEL"
+      - matchRegex:
+          path: spec.values.env.variables.VARIABLES_THAT_SHOULD_BE_PRINTED
+          pattern: "PORT"
+
+  - it: learn-go should match snapshot
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - matchSnapshot: {}
+
+  # ---------------------------------------------------------------------------
+  # learn-mesh (documentIndex: 1)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-mesh should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-mesh
+
+  - it: learn-mesh should reference the learn-mesh GitRepository as source
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-mesh
+
+  - it: learn-mesh should use the correct image repository
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/dxas90/mesh
+
+  - it: learn-mesh fullnameOverride should be learn-mesh
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.values.fullnameOverride
+          value: learn-mesh
+
+  - it: learn-mesh extraEnv should point to the learn-go service
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.values.extraEnv.LEARN_GO_SERVICE_URL
+          value: http://learn-go:8080
+
+  - it: learn-mesh extraEnv should point to the learn-python service
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.values.extraEnv.LEARN_PYTHON_SERVICE_URL
+          value: http://learn-python:8000
+
+  - it: learn-mesh extraEnv should point to the learn-rust service
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.values.extraEnv.LEARN_RUST_SERVICE_URL
+          value: http://learn-rust:8080
+
+  # ---------------------------------------------------------------------------
+  # learn-python (documentIndex: 2)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-python should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-python
+
+  - it: learn-python should reference the learn-python GitRepository as source
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-python
+
+  - it: learn-python should use a distinct chart path
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.chart.spec.chart
+          value: ./k8s/learn-python
+
+  - it: learn-python should use the correct image repository
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/dxas90/learn-python
+
+  - it: learn-python values should set fullnameOverride
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.values.fullnameOverride
+          value: learn-python
+
+  # ---------------------------------------------------------------------------
+  # learn-rust (documentIndex: 3)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-rust should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-rust
+
+  - it: learn-rust should reference the learn-rust GitRepository as source
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-rust
+
+  - it: learn-rust should use the correct image repository
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/dxas90/learn-rust
+
+  - it: learn-rust values should set fullnameOverride
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.values.fullnameOverride
+          value: learn-rust
+
+  # ---------------------------------------------------------------------------
+  # learn-ui (documentIndex: 4)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-ui should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-ui
+
+  - it: learn-ui should reference the learn-ui GitRepository as source
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-ui
+
+  - it: learn-ui should use a distinct chart path
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.chart.spec.chart
+          value: ./k8s/learn-ui
+
+  - it: learn-ui should use the correct image repository
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/dxas90/learn-node-ui
+
+  - it: learn-ui values should set fullnameOverride
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.values.fullnameOverride
+          value: learn-ui
+
+  # ---------------------------------------------------------------------------
+  # sourceRef name mirrors metadata.name for every system
+  # ---------------------------------------------------------------------------
+
+  - it: sourceRef name should mirror the HelmRelease name for learn-go
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-go
+      - equal:
+          path: metadata.name
+          value: learn-go
+
+  - it: sourceRef name should mirror the HelmRelease name for learn-mesh
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-mesh
+      - equal:
+          path: metadata.name
+          value: learn-mesh
+
+  - it: sourceRef name should mirror the HelmRelease name for learn-python
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-python
+      - equal:
+          path: metadata.name
+          value: learn-python
+
+  - it: sourceRef name should mirror the HelmRelease name for learn-rust
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-rust
+      - equal:
+          path: metadata.name
+          value: learn-rust
+
+  - it: sourceRef name should mirror the HelmRelease name for learn-ui
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.chart.spec.sourceRef.name
+          value: learn-ui
+      - equal:
+          path: metadata.name
+          value: learn-ui
+
+  # ---------------------------------------------------------------------------
+  # Custom values: non-default targetNamespace
+  # ---------------------------------------------------------------------------
+
+  - it: should deploy to a custom targetNamespace when configured
+    values:
+      - testdata/staging-namespace.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.targetNamespace
+          value: staging
+
+  # ---------------------------------------------------------------------------
+  # Custom values: values passthrough
+  # ---------------------------------------------------------------------------
+
+  - it: should pass arbitrary values through to the HelmRelease spec
+    values:
+      - testdata/rich-values.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.values.image.repository
+          value: ghcr.io/example/my-app
+      - equal:
+          path: spec.values.image.tag
+          value: "1.0.0"
+      - equal:
+          path: spec.values.replicaCount
+          value: 3
+      - equal:
+          path: spec.values.resources.limits.cpu
+          value: 500m
+
+  # ---------------------------------------------------------------------------
+  # Custom values: custom chart path
+  # ---------------------------------------------------------------------------
+
+  - it: should use a custom chart path when configured
+    values:
+      - testdata/custom-chart-path.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.chart.spec.chart
+          value: ./deploy/helm

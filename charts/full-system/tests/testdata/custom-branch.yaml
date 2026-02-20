@@ -1,0 +1,16 @@
+# Single system tracking a non-default branch. Clears all defaults.
+systems:
+  my-app:
+    source:
+      url: https://github.com/example/my-app.git
+      ref:
+        branch: develop
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/my-app

@@ -1,0 +1,15 @@
+systems:
+  my-app:
+    source:
+      url: https://github.com/example/my-app.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/my-app

@@ -1,0 +1,330 @@
+suite: GitRepository resources
+templates:
+  - templates/git-repository.yaml
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Document count
+  # ---------------------------------------------------------------------------
+
+  - it: should render no resources when systems map is empty (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render one GitRepository per configured system
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  - it: should render exactly one resource for a single system
+    values:
+      - testdata/single-app.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # ---------------------------------------------------------------------------
+  # API contract: all documents
+  # ---------------------------------------------------------------------------
+
+  - it: all GitRepositories should use the correct apiVersion
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isAPIVersion:
+          of: source.toolkit.fluxcd.io/v1
+
+  - it: all GitRepositories should have kind GitRepository
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isKind:
+          of: GitRepository
+
+  - it: all GitRepositories should be in the flux-system namespace
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: flux-system
+
+  - it: all GitRepositories should have a 30-minute reconciliation interval
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.interval
+          value: 30m
+
+  - it: all GitRepositories should track the main branch by default
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - equal:
+          path: spec.ref.branch
+          value: main
+
+  - it: all GitRepositories should have a non-empty ignore field
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isNotNull:
+          path: spec.ignore
+
+  - it: all GitRepositories should have a non-empty url field
+    values:
+      - testdata/all-systems.yaml
+    asserts:
+      - isNotNull:
+          path: spec.url
+
+  # ---------------------------------------------------------------------------
+  # learn-go (documentIndex: 0 — alphabetical order)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-go should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-go
+
+  - it: learn-go should have the correct source URL
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.url
+          value: https://github.com/dxas90/learn-go.git
+
+  - it: learn-go should track branch main
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ref.branch
+          value: main
+      - notExists:
+          path: spec.ref.tag
+
+  - it: learn-go ignore rules should exclude root and include k8s directory
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.ignore
+          pattern: "/\\*"
+      - matchRegex:
+          path: spec.ignore
+          pattern: "!k8s/"
+
+  - it: learn-go should match snapshot
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 0
+    asserts:
+      - matchSnapshot: {}
+
+  # ---------------------------------------------------------------------------
+  # learn-mesh (documentIndex: 1)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-mesh should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-mesh
+
+  - it: learn-mesh should have the correct source URL
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.url
+          value: https://github.com/dxas90/mesh.git
+
+  - it: learn-mesh ignore rules should exclude root and include k8s directory
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.ignore
+          pattern: "/\\*"
+      - matchRegex:
+          path: spec.ignore
+          pattern: "!k8s/"
+
+  # ---------------------------------------------------------------------------
+  # learn-python (documentIndex: 2)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-python should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-python
+
+  - it: learn-python should have the correct source URL
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.url
+          value: https://github.com/dxas90/learn-python.git
+
+  # ---------------------------------------------------------------------------
+  # learn-rust (documentIndex: 3)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-rust should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-rust
+
+  - it: learn-rust should have the correct source URL
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.url
+          value: https://github.com/dxas90/learn-rust.git
+
+  # ---------------------------------------------------------------------------
+  # learn-ui (documentIndex: 4)
+  # ---------------------------------------------------------------------------
+
+  - it: learn-ui should have the correct name
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: metadata.name
+          value: learn-ui
+
+  - it: learn-ui should have the correct source URL
+    values:
+      - testdata/all-systems.yaml
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: spec.url
+          value: https://github.com/dxas90/learn-node-ui.git
+
+  # ---------------------------------------------------------------------------
+  # Custom values: branch override
+  # ---------------------------------------------------------------------------
+
+  - it: should use a custom branch when overridden
+    values:
+      - testdata/custom-branch.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ref.branch
+          value: develop
+      - equal:
+          path: metadata.name
+          value: my-app
+
+  # ---------------------------------------------------------------------------
+  # Custom values: tag-based ref
+  # ---------------------------------------------------------------------------
+
+  - it: should support a tag-based ref instead of a branch
+    values:
+      - testdata/tag-ref.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ref.tag
+          value: v1.2.3
+      - notExists:
+          path: spec.ref.branch
+
+  # ---------------------------------------------------------------------------
+  # Custom values: commit-based ref
+  # ---------------------------------------------------------------------------
+
+  - it: should support a commit SHA ref
+    values:
+      - testdata/commit-ref.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ref.commit
+          value: abc123def456
+      - notExists:
+          path: spec.ref.branch
+
+  # ---------------------------------------------------------------------------
+  # Custom values: multiple systems maintain alphabetical ordering
+  # ---------------------------------------------------------------------------
+
+  - it: should render systems in alphabetical order — two systems total
+    values:
+      - testdata/two-systems.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: alpha-app should be documentIndex 0 (sorted before zebra-app)
+    values:
+      - testdata/two-systems.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.name
+          value: alpha-app
+
+  - it: zebra-app should be documentIndex 1 (sorted after alpha-app)
+    values:
+      - testdata/two-systems.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: zebra-app
+
+  # ---------------------------------------------------------------------------
+  # Custom values: custom ignore rules
+  # ---------------------------------------------------------------------------
+
+  - it: should render custom ignore patterns verbatim
+    values:
+      - testdata/custom-ignore.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.ignore
+          pattern: "!helm/"
+      - matchRegex:
+          path: spec.ignore
+          pattern: "!manifests/"
+      - notMatchRegex:
+          path: spec.ignore
+          pattern: "!k8s/"

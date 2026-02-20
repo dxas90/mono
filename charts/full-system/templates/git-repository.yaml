@@ -1,0 +1,14 @@
+{{- range $name, $system := .Values.systems }}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: {{ $name }}
+  namespace: flux-system
+spec:
+  interval: 30m
+  url: {{ $system.source.url }}
+  ref: {{ $system.source.ref | toYaml | nindent 4 }}
+  ignore: |
+{{ $system.source.ignore | indent 4 }}
+{{- end }}

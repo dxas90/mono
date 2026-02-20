@@ -1,0 +1,27 @@
+# Default values for full-system.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+systems: {}
+  # x-system:
+  #   replicaCount: 1
+  #   source:
+  #     interval: 30m
+  #     url: https://github.com/example/example.git
+  #     ref:
+  #       branch: main
+  #     ignore: |
+  #       # exclude
+  #       /*
+  #       # include
+  #       !k8s/
+  #   helmRelease:
+  #     targetNamespace: default
+  #     chart: ./k8s/example
+  #     values:
+  #       image:
+  #         repository: "ghcr.io/example/example-go"
+  #       fullnameOverride: "example"
+  #       env:
+  #         variables:
+  #           VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"

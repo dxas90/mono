@@ -1,0 +1,23 @@
+# Single system with a rich set of helmRelease values to verify passthrough.
+# Clears all defaults.
+systems:
+  my-app:
+    source:
+      url: https://github.com/example/my-app.git
+      ref:
+        branch: main
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/my-app
+          tag: "1.0.0"
+        replicaCount: 3
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi

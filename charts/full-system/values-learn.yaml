@@ -1,0 +1,110 @@
+# Default values for full-system.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+systems:
+  learn-go:
+    source:
+      url: https://github.com/dxas90/learn-go.git
+      ref:
+        branch: main
+      ignore: |
+        # exclude
+        /*
+        # include
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-go"
+        fullnameOverride: "learn-go"
+        env:
+          variables:
+            VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"
+
+  learn-python:
+    source:
+      url: https://github.com/dxas90/learn-python.git
+      ref:
+        branch: main
+      ignore: |
+        # exclude
+        /*
+        # include
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/learn-python
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-python"
+        fullnameOverride: "learn-python"
+        env:
+          variables:
+            VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"
+
+  learn-rust:
+    source:
+      url: https://github.com/dxas90/learn-rust.git
+      ref:
+        branch: main
+      ignore: |
+        # exclude
+        /*
+        # include
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-rust"
+        fullnameOverride: "learn-rust"
+        env:
+          variables:
+            VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"
+
+  learn-mesh:
+    source:
+      url: https://github.com/dxas90/mesh.git
+      ref:
+        branch: main
+      ignore: |
+        # exclude
+        /*
+        # include
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: "ghcr.io/dxas90/mesh"
+        fullnameOverride: "learn-mesh"
+        extraEnv:
+          LEARN_GO_SERVICE_URL: "http://learn-go:8080"
+          LEARN_PYTHON_SERVICE_URL: "http://learn-python:8000"
+          LEARN_RUST_SERVICE_URL: "http://learn-rust:8080"
+
+  learn-ui:
+    source:
+      url: https://github.com/dxas90/learn-node-ui.git
+      ref:
+        branch: main
+      ignore: |
+        # exclude
+        /*
+        # include
+        !k8s/
+    helmRelease:
+      targetNamespace: default
+      chart: ./k8s/learn-ui
+      values:
+        image:
+          repository: "ghcr.io/dxas90/learn-node-ui"
+        fullnameOverride: "learn-ui"
+        env:
+          variables:
+            VARIABLES_THAT_SHOULD_BE_PRINTED: "LOG_LEVEL EVENT_THRESHOLD NODE_ENV PORT REDIS_DB REDIS_HOST REDIS_PORT STORAGE_DRIVER"

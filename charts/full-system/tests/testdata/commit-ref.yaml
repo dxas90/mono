@@ -1,0 +1,16 @@
+# Single system pinned to a specific commit SHA. Clears all defaults.
+systems:
+  pinned-app:
+    source:
+      url: https://github.com/example/pinned-app.git
+      ref:
+        commit: abc123def456
+      ignore: |
+        /*
+        !k8s/
+    helmRelease:
+      targetNamespace: prod
+      chart: ./k8s/chart
+      values:
+        image:
+          repository: ghcr.io/example/pinned-app
