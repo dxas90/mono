@@ -7,24 +7,29 @@ systems:
     helmRelease:
       values:
         image:
-          repository: "ghcr.io/dxas90/learn-go"
+          tag: "latest"
   learn-python:
     helmRelease:
       values:
         image:
-          repository: "ghcr.io/dxas90/learn-python"
+          tag: "latest"
   learn-rust:
     helmRelease:
       values:
         image:
-          repository: "ghcr.io/dxas90/learn-rust"
+          tag: "latest"
   learn-mesh:
     helmRelease:
       values:
         image:
-          repository: "ghcr.io/dxas90/mesh"
+          tag: "latest"
+        resources:
+          limits: {}
+          requests:
+            cpu: 100m
+      memory: 512Mi
   learn-ui:
     helmRelease:
       values:
         image:
-          repository: "ghcr.io/dxas90/learn-node-ui"
+          tag: "latest"
