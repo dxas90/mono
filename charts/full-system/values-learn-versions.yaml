@@ -24,7 +24,8 @@ systems:
         image:
           tag: "latest"
         resources:
-          limits: {}
+          limits:
+            memory: 2Gi
           requests:
             cpu: 100m
       memory: 512Mi

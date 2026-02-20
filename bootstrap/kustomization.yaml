@@ -5,6 +5,8 @@ resources:
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
   - https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.86.1/stripped-down-crds.yaml
   - github.com/fluxcd/flux2/manifests/install?ref=v2.7.5
+  - https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+  - github.com/kubernetes/kube-state-metrics/examples/standard?ref=v2.18.0
 patches:
   - patch: |-
       $patch: delete
@@ -120,6 +122,16 @@ patches:
     target:
       kind: Deployment
       name: (helm-controller|kustomize-controller)
+
+  - # Allow metrics-server to scrape kubelets with self-signed certificates
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls
+    target:
+      kind: Deployment
+      name: metrics-server
+      namespace: kube-system
 
 # kubectl apply --kustomize bootstrap
 # kubectl apply -f clusters/kind/gotk-sync.yaml -f clusters/kind/dev/gotk-sync.yaml
