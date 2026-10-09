@@ -1,0 +1,11 @@
+.sbom-vulnerability-scanner:
+  image: ghcr.io/jdx/mise:2026.10.4-debian
+  before_script:
+    - curl -sSfL https://get.anchore.io/syft | sh -s -- -b /tmp
+    - curl -sSfL https://get.anchore.io/grype | sh -s -- -b /tmp
+  script:
+    - |
+      /tmp/syft dir:`pwd`
+      -o spdx-json=report.spdx.json \    # SPDX-JSON formatted SBOM to a file
+      -o cyclonedx-json=report.cdx.json  # CycloneDX-JSON formatted SBOM to a file
+      -o json | grype

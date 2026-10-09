@@ -1,0 +1,54 @@
+# Template: Build, Test, Notify, and Deploy a containerized Python app
+# Adapted from https://gitlab.com/dxas90/network-stats
+.load_env: &load_env
+  - touch build.env || true && source build.env
+
+# https://mise.jdx.dev/continuous-integration.html#use-the-official-image
+
+.build-mise:
+  image: ghcr.io/jdx/mise:2026.10.4-debian
+  variables:
+    MISE_DATA_DIR: $CI_PROJECT_DIR/.mise
+    MISE_CACHE_DIR: $CI_PROJECT_DIR/.mise/cache
+  cache:
+    key:
+      prefix: mise-image-amd64
+      files: [mise.toml, mise.lock]
+    paths:
+      - .mise/installs/
+      - .mise/cache/
+  script:
+    - echo "🔨 Building container for $CI_COMMIT_BRANCH"
+    - echo "docker build -t $IMAGE_NAME ."
+    - mise install --locked
+
+.test-mise:
+  image: ghcr.io/jdx/mise:2026.10.4-debian
+  variables:
+    MISE_DATA_DIR: $CI_PROJECT_DIR/.mise
+    MISE_CACHE_DIR: $CI_PROJECT_DIR/.mise/cache
+  cache:
+    key:
+      prefix: mise-image-amd64
+      files: [mise.toml, mise.lock]
+    paths:
+      - .mise/installs/
+      - .mise/cache/
+  script:
+    - mise install --locked
+    - echo "🧪 Running tests for $CI_COMMIT_BRANCH"
+
+.deploy-mise:
+  image: ghcr.io/jdx/mise:2026.10.4-debian
+  variables:
+    MISE_DATA_DIR: $CI_PROJECT_DIR/.mise
+    MISE_CACHE_DIR: $CI_PROJECT_DIR/.mise/cache
+  cache:
+    key:
+      prefix: mise-image-amd64
+      files: [mise.toml, mise.lock]
+    paths:
+      - .mise/installs/
+      - .mise/cache/
+  script:
+    - mise install --locked

@@ -12,6 +12,8 @@
 #       when: always
 # #     # Disable the pipeline in all other cases
 # #     - when: never
+include:
+  - local: .gitlab-ci-mise-common.yml
 
 stages:
   - build
@@ -32,11 +34,9 @@ variables:
 
 build_feature:
   stage: build
+  extends: [.build-mise]
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
-  script:
-    - echo "🔨 Building container for feature branch $CI_COMMIT_BRANCH"
-    - echo "docker build -t $IMAGE_NAME ."
 
 push_feature:
   stage: push
@@ -49,14 +49,14 @@ push_feature:
 
 test_feature:
   stage: test
+  extends: [.test-mise]
   needs: [push_feature]
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'
-  script:
-    - echo "🧪 Running tests for feature branch $CI_COMMIT_BRANCH"
 
 deploy_feature:
   stage: deploy
+  extends: [.deploy-mise]
   needs: [test_feature]
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"'

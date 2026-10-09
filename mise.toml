@@ -1,5 +1,5 @@
 [tools]
-python = { version='3', virtualenv='.venv' }
+python = { version='3' }
 uv = "latest"
 
 [settings]
