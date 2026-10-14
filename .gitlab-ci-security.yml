@@ -1,11 +1,24 @@
+# https://oss.anchore.com/docs/reference/grype/cli/
 .sbom-vulnerability-scanner:
-  image: ghcr.io/jdx/mise:2026.10.4-debian
+  image: registry.gitlab.com/gitlab-ci-utils/curl-jq:latest
   before_script:
     - curl -sSfL https://get.anchore.io/syft | sh -s -- -b /tmp
     - curl -sSfL https://get.anchore.io/grype | sh -s -- -b /tmp
   script:
-    - |
-      /tmp/syft dir:`pwd`
-      -o spdx-json=report.spdx.json \    # SPDX-JSON formatted SBOM to a file
-      -o cyclonedx-json=report.cdx.json  # CycloneDX-JSON formatted SBOM to a file
-      -o json | grype
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - cd "$CI_PROJECT_DIR"
+    - /tmp/syft dir:. -o spdx-json=report.spdx.json -o json=report-sbom.json
+    - /tmp/grype sbom:./report-sbom.json -o json=report-vuln.json -o cyclonedx-json=report.cdx.json -o sarif=report-sarif.sarif
+  artifacts:
+    paths:
+      - report-sarif.sarif
+      - report-sbom.json
+      - report-vuln.json
+      - report.cdx.json
+      - report.spdx.json
+    expire_in: 1 week
+    reports:
+      cyclonedx:
+        - report.cdx.json
+      sarif:
+        - report-sarif.sarif
