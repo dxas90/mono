@@ -41,7 +41,7 @@
     - echo "Notify all the people that need to know about this project using some tool like Slack/Mattermost/RocketChat/MSTeams..."
 
 # Containerize the app using Buildah instead of Kaniko
-.containerize:
+.containerize-buildah:
   image: quay.io/buildah/stable:latest
   stage: containerize
   variables:
@@ -140,7 +140,149 @@
     - if: $CONTAINERFILE_PATH
     - if: $BUILD_CONTEXT != $CI_PROJECT_DIR
 
-.image-promote:
+
+.containerize-buildx:
+  image: docker:cli
+  stage: containerize
+
+  services:
+    - name: docker:dind
+      alias: docker
+
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+    BUILD_CONTEXT: "$CI_PROJECT_DIR"
+    DOCKER_PLATFORMS: "linux/amd64,linux/arm64"
+    BUILDX_ARGS: ""
+    CACHE_IMAGE: "$CI_REGISTRY_IMAGE:cache"
+
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 30 mins
+
+  before_script:
+    - |
+      set -eu
+      echo "$CI_REGISTRY_PASSWORD" |
+        docker login "$CI_REGISTRY" \
+          --username "$CI_REGISTRY_USER" \
+          --password-stdin
+
+      docker buildx create \
+        --name "builder-$CI_JOB_ID" \
+        --driver docker-container \
+        --use
+
+      docker buildx inspect --bootstrap
+
+  script:
+    - |
+      set -eu
+
+      # Load existing build environment
+      if [ -f build.env ]; then
+        set -a
+        . ./build.env
+        set +a
+      fi
+
+      : "${BUILD_CONTEXT:=$CI_PROJECT_DIR}"
+      : "${DOCKER_PLATFORMS:=linux/amd64,linux/arm64}"
+      : "${BUILDX_ARGS:=}"
+      : "${CACHE_IMAGE:=$CI_REGISTRY_IMAGE:cache}"
+
+      # Locate Dockerfile / Containerfile
+      if [ -z "${DOCKERFILE_PATH:-}" ]; then
+        if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Dockerfile"
+        elif [ -n "${CONTAINERFILE_PATH:-}" ]; then
+          DOCKERFILE_PATH="$CONTAINERFILE_PATH"
+        elif [ -f "$BUILD_CONTEXT/Containerfile" ]; then
+          DOCKERFILE_PATH="$BUILD_CONTEXT/Containerfile"
+        else
+          echo "ERROR: No Dockerfile or Containerfile found"
+          exit 1
+        fi
+      fi
+
+      echo "Using Dockerfile: $DOCKERFILE_PATH"
+
+      # Determine image tag
+      if [ -z "${IMAGE_TAG:-}" ]; then
+        if [ -n "${CI_COMMIT_TAG:-}" ]; then
+          VERSION="$CI_COMMIT_REF_SLUG"
+        elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+          VERSION="latest"
+        else
+          VERSION="branch-$CI_COMMIT_REF_SLUG"
+        fi
+
+        IMAGE_TAG="$CI_REGISTRY_IMAGE:$VERSION"
+      fi
+
+      COMMIT_IMAGE="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+
+      printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG" > build.env
+      printf 'COMMIT_IMAGE=%s\n' "$COMMIT_IMAGE" >> build.env
+
+      echo "Building: $IMAGE_TAG"
+      echo "Commit image: $COMMIT_IMAGE"
+      echo "Platforms: $DOCKER_PLATFORMS"
+
+      # Optional BuildKit secret from CI/CD variables
+      set --
+      if [ -n "${BUILD_SECRET:-}" ]; then
+        set -- "$@" --secret id=build_secret,env=BUILD_SECRET
+      fi
+
+      # Optional additional Buildx flags.
+      # Set BUILDX_ARGS only to trusted arguments.
+      if [ -n "$BUILDX_ARGS" ]; then
+        set -f
+        # Intentional word splitting for CLI arguments
+        set -- "$@" $BUILDX_ARGS
+        set +f
+      fi
+
+      if [ -z "${NO_PUSH:-}" ]; then
+        docker buildx build \
+          --file "$DOCKERFILE_PATH" \
+          --platform "$DOCKER_PLATFORMS" \
+          --tag "$IMAGE_TAG" \
+          --tag "$COMMIT_IMAGE" \
+          --cache-from "type=registry,ref=$CACHE_IMAGE" \
+          --cache-to "type=registry,ref=$CACHE_IMAGE,mode=max" \
+          "$@" \
+          --push \
+          "$BUILD_CONTEXT"
+      else
+        echo "NO_PUSH defined: building without pushing"
+
+        docker buildx build \
+          --file "$DOCKERFILE_PATH" \
+          --platform "$DOCKER_PLATFORMS" \
+          --cache-from "type=registry,ref=$CACHE_IMAGE" \
+          "$@" \
+          "$BUILD_CONTEXT"
+      fi
+
+  after_script:
+    - docker buildx rm "builder-$CI_JOB_ID" || true
+
+  rules:
+    - exists:
+        - Dockerfile
+        - Containerfile
+    - if: '$DOCKERFILE_PATH'
+    - if: '$CONTAINERFILE_PATH'
+    - if: '$BUILD_CONTEXT != $CI_PROJECT_DIR'
+
+.image-promote-buildah:
   image: quay.io/buildah/stable:latest
   stage: promote
   variables:
@@ -176,6 +318,72 @@
   artifacts:
     reports:
       dotenv: buildah-promotion.env
+  rules:
+    - if: '$PROMOTE_TAG'
+
+.image-promote-buildx:
+  image: docker:cli
+  stage: promote
+
+  variables:
+    REGISTRY: "$CI_REGISTRY"
+    REGISTRY_USER: "$CI_REGISTRY_USER"
+    REGISTRY_PASSWORD: "$CI_REGISTRY_PASSWORD"
+    IMAGE_REPOSITORY: "$CI_REGISTRY_IMAGE"
+    SOURCE_TAG: "$IMAGE_TAG"
+    TARGET_TAG: "$PROMOTE_TAG"
+
+  script:
+    - |
+      set -eu
+
+      if [ -z "${SOURCE_TAG:-}" ]; then
+        echo "ERROR: SOURCE_TAG (built image) is not set."
+        exit 1
+      fi
+
+      if [ -z "${TARGET_TAG:-}" ]; then
+        echo "ERROR: TARGET_TAG (promotion tag) is not set."
+        exit 1
+      fi
+
+      echo "$REGISTRY_PASSWORD" |
+        docker login "$REGISTRY" \
+          --username "$REGISTRY_USER" \
+          --password-stdin
+
+      # Accept either a full source reference or a simple tag
+      case "$SOURCE_TAG" in
+        */*:*|*@sha256:*)
+          SOURCE_IMAGE="$SOURCE_TAG"
+          ;;
+        *)
+          SOURCE_IMAGE="$IMAGE_REPOSITORY:$SOURCE_TAG"
+          ;;
+      esac
+
+      PROMOTED_IMAGE="$IMAGE_REPOSITORY:$TARGET_TAG"
+
+      echo "Promoting $SOURCE_IMAGE to $PROMOTED_IMAGE"
+
+      if [ -z "${NO_PUSH:-}" ]; then
+        docker buildx imagetools create \
+          --tag "$PROMOTED_IMAGE" \
+          "$SOURCE_IMAGE"
+
+        echo "PROMOTED_IMAGE=$PROMOTED_IMAGE" \
+          > promotion.env
+
+        docker buildx imagetools inspect \
+          "$PROMOTED_IMAGE"
+      else
+        echo "Skipping promotion (NO_PUSH defined)"
+      fi
+
+  artifacts:
+    reports:
+      dotenv: promotion.env
+
   rules:
     - if: '$PROMOTE_TAG'
 
