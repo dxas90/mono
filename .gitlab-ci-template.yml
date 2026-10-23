@@ -140,34 +140,39 @@
     - if: $CONTAINERFILE_PATH
     - if: $BUILD_CONTEXT != $CI_PROJECT_DIR
 
-
 .containerize-buildx:
-  image: docker:cli
+  image: docker:29-cli
   stage: containerize
 
   services:
-    - name: docker:dind
+    - name: docker:29-dind
       alias: docker
 
   variables:
-    DOCKER_HOST: tcp://docker:2376
+    DOCKER_HOST: "tcp://docker:2376"
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
 
     BUILD_CONTEXT: "$CI_PROJECT_DIR"
     DOCKER_PLATFORMS: "linux/amd64,linux/arm64"
-    BUILDX_ARGS: ""
+
     CACHE_IMAGE: "$CI_REGISTRY_IMAGE:cache"
+    CACHE_FROM: "true"
+    CACHE_TO: "true"
+
+    BUILDX_SECRETS: ""
+    BUILDX_BUILD_ARGS: ""
 
   artifacts:
     reports:
       dotenv: build.env
-    expire_in: 30 mins
+    expire_in: 1 day
 
   before_script:
     - |
       set -eu
+
       echo "$CI_REGISTRY_PASSWORD" |
         docker login "$CI_REGISTRY" \
           --username "$CI_REGISTRY_USER" \
@@ -191,11 +196,6 @@
         set +a
       fi
 
-      : "${BUILD_CONTEXT:=$CI_PROJECT_DIR}"
-      : "${DOCKER_PLATFORMS:=linux/amd64,linux/arm64}"
-      : "${BUILDX_ARGS:=}"
-      : "${CACHE_IMAGE:=$CI_REGISTRY_IMAGE:cache}"
-
       # Locate Dockerfile / Containerfile
       if [ -z "${DOCKERFILE_PATH:-}" ]; then
         if [ -f "$BUILD_CONTEXT/Dockerfile" ]; then
@@ -210,13 +210,16 @@
         fi
       fi
 
-      echo "Using Dockerfile: $DOCKERFILE_PATH"
+      if [ ! -f "$DOCKERFILE_PATH" ]; then
+        echo "ERROR: Dockerfile not found: $DOCKERFILE_PATH"
+        exit 1
+      fi
 
       # Determine image tag
       if [ -z "${IMAGE_TAG:-}" ]; then
         if [ -n "${CI_COMMIT_TAG:-}" ]; then
           VERSION="$CI_COMMIT_REF_SLUG"
-        elif [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        elif [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ]; then
           VERSION="latest"
         else
           VERSION="branch-$CI_COMMIT_REF_SLUG"
@@ -227,47 +230,73 @@
 
       COMMIT_IMAGE="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
 
+      # Prepare dotenv artifact
       printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG" > build.env
       printf 'COMMIT_IMAGE=%s\n' "$COMMIT_IMAGE" >> build.env
 
       echo "Building: $IMAGE_TAG"
-      echo "Commit image: $COMMIT_IMAGE"
       echo "Platforms: $DOCKER_PLATFORMS"
+      echo "Dockerfile: $DOCKERFILE_PATH"
 
-      # Optional BuildKit secret from CI/CD variables
+      # Assemble Buildx arguments safely
       set --
-      if [ -n "${BUILD_SECRET:-}" ]; then
-        set -- "$@" --secret id=build_secret,env=BUILD_SECRET
+
+      # Generic BuildKit secrets
+      if [ -n "${BUILDX_SECRETS:-}" ]; then
+        while IFS= read -r secret || [ -n "$secret" ]; do
+          case "$secret" in
+            ""|\#*) continue ;;
+          esac
+          set -- "$@" --secret "$secret"
+        done <<EOF
+      $BUILDX_SECRETS
+      EOF
       fi
 
-      # Optional additional Buildx flags.
-      # Set BUILDX_ARGS only to trusted arguments.
-      if [ -n "$BUILDX_ARGS" ]; then
-        set -f
-        # Intentional word splitting for CLI arguments
-        set -- "$@" $BUILDX_ARGS
-        set +f
+      # Generic Docker build arguments
+      if [ -n "${BUILDX_BUILD_ARGS:-}" ]; then
+        while IFS= read -r arg || [ -n "$arg" ]; do
+          case "$arg" in
+            ""|\#*) continue ;;
+          esac
+          set -- "$@" --build-arg "$arg"
+        done <<EOF
+      $BUILDX_BUILD_ARGS
+      EOF
       fi
+
+      # Registry cache
+      if [ "${CACHE_FROM:-true}" = "true" ]; then
+        set -- "$@" \
+          --cache-from "type=registry,ref=$CACHE_IMAGE"
+      fi
+
+      if [ "${CACHE_TO:-true}" = "true" ] &&
+         [ -z "${NO_PUSH:-}" ]; then
+        set -- "$@" \
+          --cache-to "type=registry,ref=$CACHE_IMAGE,mode=max"
+      fi
+
+      # Build configuration
+      set -- "$@" \
+        --file "$DOCKERFILE_PATH" \
+        --platform "$DOCKER_PLATFORMS" \
+        --tag "$IMAGE_TAG" \
+        --tag "$COMMIT_IMAGE"
 
       if [ -z "${NO_PUSH:-}" ]; then
+        echo "Building and pushing images..."
+
         docker buildx build \
-          --file "$DOCKERFILE_PATH" \
-          --platform "$DOCKER_PLATFORMS" \
-          --tag "$IMAGE_TAG" \
-          --tag "$COMMIT_IMAGE" \
-          --cache-from "type=registry,ref=$CACHE_IMAGE" \
-          --cache-to "type=registry,ref=$CACHE_IMAGE,mode=max" \
           "$@" \
           --push \
           "$BUILD_CONTEXT"
       else
-        echo "NO_PUSH defined: building without pushing"
+        echo "NO_PUSH defined: validating build without push"
 
         docker buildx build \
-          --file "$DOCKERFILE_PATH" \
-          --platform "$DOCKER_PLATFORMS" \
-          --cache-from "type=registry,ref=$CACHE_IMAGE" \
           "$@" \
+          --output type=cacheonly \
           "$BUILD_CONTEXT"
       fi
 
