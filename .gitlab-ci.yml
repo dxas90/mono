@@ -22,9 +22,9 @@ isolation:no-host-fs:
   stage: isolation
   script:
     - echo "=== Host filesystem must NOT be visible ==="
-    - test ! -d /Users && echo "no /Users (correct)" || (echo "LEAK: /Users visible!" && exit 1)
-    - test ! -d /System && echo "no /System (correct)" || (echo "LEAK: /System visible!" && exit 1)
-    - test ! -d /Volumes && echo "no /Volumes (correct)" || (echo "LEAK: /Volumes visible!" && exit 1)
+    - test ! -d /Users   && echo "no /Users (correct)"   || exit 1
+    - test ! -d /System  && echo "no /System (correct)"  || exit 1
+    - test ! -d /Volumes && echo "no /Volumes (correct)" || exit 1
     - echo "Host FS isolated OK"
 
 isolation:no-host-processes:
@@ -32,10 +32,10 @@ isolation:no-host-processes:
   stage: isolation
   script:
     - echo "=== Host processes must NOT be visible ==="
-    - ps aux | grep -v grep | grep -v 'sh\|ash\|ps\|runner\|sshd\|init\|sleep' | head -5 || true
+    - ps aux | wc -l | xargs echo "total processes:"
     - PIDS=$(ps aux | wc -l)
     - echo "Process count in VM: $PIDS"
-    - test "$PIDS" -lt 30 || (echo "SUSPICIOUS: $PIDS processes visible" && exit 1)
+    - test "$PIDS" -lt 30 && echo "Process count OK" || exit 1
     - echo "Process namespace isolated OK"
 
 isolation:no-cross-vm-network:
@@ -111,7 +111,7 @@ resource:cpu-one-core:
   script:
     - echo "=== Verify exactly 1 vCPU ==="
     - nproc
-    - test "$(nproc)" -eq 1 || (echo "UNEXPECTED: $(nproc) CPUs" && exit 1)
+    - test "$(nproc)" -eq 1 && echo "1 vCPU confirmed" || exit 1
     - echo "=== Cannot spawn more threads than sensible ==="
     - apk add -q python3
     - |
