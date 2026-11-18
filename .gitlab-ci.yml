@@ -54,7 +54,7 @@ lang:python:
   script:
     - apk add -q python3 py3-pip
     - python3 --version
-    - pip3 install --quiet requests httpx 2>&1 | tail -1
+    - pip3 install --quiet --break-system-packages requests httpx 2>&1 | tail -1
     - python3 -c "import requests,httpx; print('requests:',requests.__version__,'httpx:',httpx.__version__)"
     - python3 -c "print('CPU sum(i^2,1M):', sum(i*i for i in range(1_000_000)))"
 
@@ -177,7 +177,7 @@ build:python-pytest:
   stage: build-tools
   script:
     - apk add -q python3 py3-pip
-    - pip install --quiet pytest flask pydantic 2>&1 | tail -1
+    - pip install --quiet --break-system-packages pytest flask pydantic 2>&1 | tail -1
     - python3 -c "import flask,pydantic; print('flask:',flask.__version__,'pydantic:',pydantic.__version__)"
     - mkdir /tmp/pytest && cd /tmp/pytest
     - |
