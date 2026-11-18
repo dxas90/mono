@@ -196,7 +196,7 @@ build:docker-absent:
   extends: .msb
   stage: build-tools
   script:
-    - command -v docker && (echo "UNEXPECTED: docker present" && exit 1) || echo "docker not available (correct)"
+    - if command -v docker; then echo "UNEXPECTED: docker present" && exit 1; else echo "docker not available (correct)"; fi
     - apk add -q build-base cmake
     - gcc --version | head -1 && cmake --version | head -1
 
