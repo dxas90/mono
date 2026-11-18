@@ -1,0 +1,316 @@
+stages:
+  - isolation
+  - resource-limits
+  - failure-modes
+  - signal-proc
+  - network-edge
+
+.msb:
+  tags: [msb]
+  before_script:
+    - apk update -q
+
+# ── ISOLATION ─────────────────────────────────────────────────────────────────
+
+isolation:no-host-fs:
+  extends: .msb
+  stage: isolation
+  script:
+    - echo "=== Host filesystem must NOT be visible ==="
+    - test ! -d /Users   && echo "no /Users (correct)"   || exit 1
+    - test ! -d /System  && echo "no /System (correct)"  || exit 1
+    - test ! -d /Volumes && echo "no /Volumes (correct)" || exit 1
+    - echo "Host FS isolated OK"
+
+isolation:no-host-processes:
+  extends: .msb
+  stage: isolation
+  script:
+    - echo "=== Host processes must NOT be visible ==="
+    - ps aux | wc -l | xargs echo "total processes:"
+    - |
+      PIDS=$(ps aux | wc -l)
+      echo "Process count: $PIDS"
+      test "$PIDS" -lt 100 && echo "Process count OK" || exit 1
+    - echo "Process namespace isolated OK"
+
+isolation:no-cross-vm-network:
+  extends: .msb
+  stage: isolation
+  script:
+    - apk add -q iproute2
+    - echo "=== VM network interfaces ==="
+    - ip addr show
+    - echo "=== Routing table ==="
+    - ip route show
+    - ping -c 1 -W 1 172.16.0.1 2>&1 | tail -2 || echo "172.16.0.1 unreachable (expected)"
+
+isolation:no-privileged-escape:
+  extends: .msb
+  stage: isolation
+  script:
+    - echo "=== Capability check ==="
+    - cat /proc/self/status | grep -i cap | head -10
+    - mount -t tmpfs tmpfs /mnt 2>&1 | head -2 && echo "mount worked" || echo "mount blocked (expected)"
+    - modprobe dummy 2>&1 | head -2 || echo "modprobe blocked (expected)"
+    - ls /dev | head -20
+
+# ── RESOURCE LIMITS ───────────────────────────────────────────────────────────
+
+resource:oom-kill:
+  extends: .msb
+  stage: resource-limits
+  allow_failure: true
+  script:
+    - apk add -q python3
+    - echo "=== Allocate beyond RAM — OOM should fire ==="
+    - |
+      python3 << 'EOF'
+      import sys
+      chunks = []
+      allocated = 0
+      try:
+          while True:
+              chunks.append(bytearray(100 * 1024 * 1024))
+              allocated += 100
+              print(f"  {allocated}MB allocated")
+              sys.stdout.flush()
+      except MemoryError:
+          print(f"MemoryError at {allocated}MB — OOM limit enforced correctly")
+      EOF
+
+resource:disk-full:
+  extends: .msb
+  stage: resource-limits
+  script:
+    - df -h / | tail -1
+    - |
+      AVAIL=$(df / | awk 'NR==2{print $4}')
+      FILL_MB=$(( ($AVAIL / 1024) - 50 ))
+      echo "Writing ${FILL_MB}MB..."
+      dd if=/dev/zero of=/tmp/fillfile bs=1M count=$FILL_MB 2>&1 | tail -1
+    - df -h / | tail -1
+    - dd if=/dev/zero of=/tmp/overflow bs=1M count=200 2>&1 | tail -2 || echo "Write failed as expected"
+    - rm /tmp/fillfile
+    - df -h / | tail -1
+    - echo "Disk recovered after cleanup"
+
+resource:cpu-one-core:
+  extends: .msb
+  stage: resource-limits
+  script:
+    - nproc
+    - test "$(nproc)" -eq 1 && echo "1 vCPU confirmed" || exit 1
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import threading, time
+      results = []
+      def spin(n):
+          start = time.time()
+          while time.time() - start < 0.5:
+              _ = sum(range(10000))
+          results.append(n)
+      threads = [threading.Thread(target=spin, args=(i,)) for i in range(8)]
+      t0 = time.time()
+      [t.start() for t in threads]
+      [t.join() for t in threads]
+      print(f"8 threads on 1 vCPU: {time.time()-t0:.2f}s, all {len(results)} finished")
+      EOF
+
+resource:fd-limits:
+  extends: .msb
+  stage: resource-limits
+  script:
+    - ulimit -n
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import resource
+      soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+      print(f"FD limit: soft={soft} hard={hard}")
+      fds = []
+      try:
+          for i in range(1000):
+              fds.append(open('/dev/null', 'r'))
+          print(f"Opened {len(fds)} FDs OK")
+      except OSError as e:
+          print(f"OSError at {len(fds)} FDs: {e}")
+      finally:
+          for f in fds: f.close()
+      EOF
+
+# ── FAILURE MODES ─────────────────────────────────────────────────────────────
+
+failure:exit-nonzero:
+  extends: .msb
+  stage: failure-modes
+  allow_failure: true
+  script:
+    - echo "This job intentionally fails"
+    - exit 42
+  after_script:
+    - echo "after_script runs even on failure"
+
+failure:command-not-found:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - totally_fake_command_xyz 2>&1 || echo "command not found — handled"
+    - echo "Job continues after handled error"
+
+failure:partial-script-fail:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - echo "step 1 OK"
+    - false || echo "step 2 failed but caught"
+    - echo "step 3 OK"
+
+failure:timeout-long-job:
+  extends: .msb
+  stage: failure-modes
+  timeout: 1m
+  script:
+    - echo "Sleeping 45s inside 1m timeout"
+    - sleep 45
+    - echo "Woke up before timeout"
+
+failure:large-output:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import sys
+      line = "A" * 200 + "\n"
+      for i in range(50000):
+          sys.stdout.write(f"{i:06d}: {line}")
+      print("Done — 10MB output generated")
+      EOF
+
+# ── SIGNAL / PROCESS HANDLING ─────────────────────────────────────────────────
+
+signal:sigterm-handling:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import signal, time, os
+      received = []
+      def handler(sig, frame):
+          received.append(sig)
+          print(f"Caught signal {sig}")
+      signal.signal(signal.SIGTERM, handler)
+      signal.signal(signal.SIGINT, handler)
+      os.kill(os.getpid(), signal.SIGTERM)
+      time.sleep(0.1)
+      assert signal.SIGTERM in received, "SIGTERM not received!"
+      print("SIGTERM handling OK")
+      EOF
+
+signal:zombie-processes:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import subprocess, time
+      procs = [subprocess.Popen(['sh', '-c', f'echo child {i}']) for i in range(5)]
+      time.sleep(0.2)
+      for p in procs: p.wait()
+      result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+      zombies = [l for l in result.stdout.split('\n') if '<defunct>' in l or ' Z ' in l]
+      print(f"Zombies after reap: {len(zombies)} — {'OK' if not zombies else zombies}")
+      EOF
+
+signal:fork-bomb-protection:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - ulimit -u
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import subprocess
+      procs = []
+      try:
+          for i in range(500):
+              procs.append(subprocess.Popen(['sleep', '2']))
+      except Exception as e:
+          print(f"Stopped at {len(procs)} processes: {type(e).__name__}: {e}")
+      finally:
+          print(f"Spawned {len(procs)} before limit")
+          for p in procs:
+              try: p.kill(); p.wait()
+              except: pass
+      EOF
+
+# ── NETWORK EDGE CASES ────────────────────────────────────────────────────────
+
+net:dns-failure:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q curl
+    - curl -sf --max-time 5 https://this-domain-definitely-does-not-exist-xyz123.com 2>&1 | head -3 || echo "DNS failure handled correctly"
+    - curl -sf --max-time 3 http://192.0.2.1/test 2>&1 | head -3 || echo "Unreachable IP timed out correctly"
+
+net:localhost-services:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import http.server, threading, urllib.request, time
+      class Handler(http.server.BaseHTTPRequestHandler):
+          def do_GET(self):
+              self.send_response(200); self.end_headers()
+              self.wfile.write(b"hello from microVM local server")
+          def log_message(self, *a): pass
+      srv = http.server.HTTPServer(('127.0.0.1', 18080), Handler)
+      t = threading.Thread(target=srv.serve_forever); t.daemon = True; t.start()
+      time.sleep(0.2)
+      resp = urllib.request.urlopen('http://127.0.0.1:18080/', timeout=5).read()
+      assert resp == b"hello from microVM local server", f"Got: {resp}"
+      srv.shutdown()
+      print("Local HTTP server test passed")
+      EOF
+
+net:ipv6:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q curl
+    - ip -6 addr show || echo "No IPv6 addresses"
+    - curl -sf --max-time 5 -6 https://ipv6.google.com 2>&1 | head -3 && echo "IPv6 reachable" || echo "IPv6 not available (expected)"
+
+net:high-concurrency:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import urllib.request, threading, time, collections
+      urls = ['https://httpbin.org/uuid'] * 100
+      results = collections.Counter()
+      lock = threading.Lock()
+      def fetch(url):
+          try:
+              urllib.request.urlopen(url, timeout=15).read()
+              with lock: results['ok'] += 1
+          except Exception as e:
+              with lock: results[type(e).__name__] += 1
+      t0 = time.time()
+      threads = [threading.Thread(target=fetch, args=(u,)) for u in urls]
+      [t.start() for t in threads]; [t.join() for t in threads]
+      print(f"100 requests in {time.time()-t0:.2f}s: {dict(results)}")
+      assert results['ok'] >= 80, f"Too many failures: {dict(results)}"
+      print("High-concurrency test passed")
+      EOF
