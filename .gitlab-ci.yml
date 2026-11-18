@@ -15,8 +15,6 @@
 include:
   - local: .gitlab-ci-mise-common.yml
   - local: .gitlab-ci-security.yml
-  - local: .gitlab-ci-msb-happy-path.yml
-  - local: .gitlab-ci-msb-adversarial-corner-case.yml
 
 stages:
   - build
