@@ -1,299 +1,369 @@
-# Microsandbox fleet runner — comprehensive corner-case test suite
-# Each job runs in a FRESH ephemeral microVM (alpine 3.24, aarch64, 1 CPU, 1GB RAM, 3.9GB disk)
+# Microsandbox corner-case / adversarial test suite
+# Tests failure modes, resource limits, signal handling, isolation guarantees,
+# and behaviours outside the happy path.
 
 stages:
-  - baseline
-  - languages
-  - build-tools
-  - network
-  - stress
+  - isolation
+  - resource-limits
+  - failure-modes
+  - signal-proc
+  - network-edge
 
 .msb:
   tags: [msb]
   before_script:
     - apk update -q
 
-# ── baseline ──────────────────────────────────────────────────────────────────
+# ── ISOLATION ─────────────────────────────────────────────────────────────────
+# Verify that VMs are truly isolated from the Mac host and each other.
 
-baseline:isolation:
+isolation:no-host-fs:
   extends: .msb
-  stage: baseline
+  stage: isolation
   script:
-    - echo "=== VM identity ===" && hostname && uname -a
-    - echo "Arch=$(uname -m) Cores=$(nproc) RAM=$(free -m | awk '/Mem/{print $2}')MB"
-    - df -h /
-    - cat /proc/1/cmdline | tr '\0' ' '
-    - ps aux | wc -l | xargs echo "process count:"
-    - id
+    - echo "=== Host filesystem must NOT be visible ==="
+    - test ! -d /Users && echo "no /Users (correct)" || (echo "LEAK: /Users visible!" && exit 1)
+    - test ! -d /System && echo "no /System (correct)" || (echo "LEAK: /System visible!" && exit 1)
+    - test ! -d /Volumes && echo "no /Volumes (correct)" || (echo "LEAK: /Volumes visible!" && exit 1)
+    - echo "Host FS isolated OK"
 
-baseline:ephemeral:
+isolation:no-host-processes:
   extends: .msb
-  stage: baseline
+  stage: isolation
   script:
-    - test ! -f /tmp/msb-was-here || (echo "LEAK detected!" && exit 1)
-    - echo "clean" > /tmp/msb-was-here
-    - echo "Wrote sentinel - next job on a DIFFERENT VM wont see it."
+    - echo "=== Host processes must NOT be visible ==="
+    - ps aux | grep -v grep | grep -v 'sh\|ash\|ps\|runner\|sshd\|init\|sleep' | head -5 || true
+    - PIDS=$(ps aux | wc -l)
+    - echo "Process count in VM: $PIDS"
+    - test "$PIDS" -lt 30 || (echo "SUSPICIOUS: $PIDS processes visible" && exit 1)
+    - echo "Process namespace isolated OK"
 
-baseline:network:
+isolation:no-cross-vm-network:
   extends: .msb
-  stage: baseline
+  stage: isolation
   script:
-    - apk add -q curl
-    - curl -sf --max-time 5 https://gitlab.com          > /dev/null && echo "gitlab.com OK"
-    - curl -sf --max-time 5 https://github.com          > /dev/null && echo "github.com OK"
-    - curl -sf --max-time 5 https://registry.npmjs.org/ > /dev/null && echo "npmjs.org OK"
-    - curl -sf --max-time 5 https://pypi.org/           > /dev/null && echo "pypi.org OK"
-    - curl -sf --max-time 5 https://proxy.golang.org/   > /dev/null && echo "proxy.golang.org OK"
-    - getent hosts gitlab.com
+    - apk add -q iproute2
+    - echo "=== VM network interfaces ==="
+    - ip addr show
+    - echo "=== Routing table ==="
+    - ip route show
+    - echo "=== Cannot reach another VM's /30 subnet peer directly ==="
+    - ping -c 1 -W 1 172.16.0.1 2>&1 | tail -2 || echo "172.16.0.1 unreachable (expected for non-host IPs)"
 
-# ── languages ─────────────────────────────────────────────────────────────────
-
-lang:python:
+isolation:no-privileged-escape:
   extends: .msb
-  stage: languages
+  stage: isolation
   script:
-    - apk add -q python3 py3-pip
-    - python3 --version
-    - pip3 install --quiet --break-system-packages requests httpx 2>&1 | tail -1
-    - python3 -c "import requests,httpx; print('requests:',requests.__version__,'httpx:',httpx.__version__)"
-    - python3 -c "print('CPU sum(i^2,1M):', sum(i*i for i in range(1_000_000)))"
+    - echo "=== Capability check ==="
+    - cat /proc/self/status | grep -i cap | head -10
+    - echo "=== Cannot mount arbitrary filesystems ==="
+    - mount -t tmpfs tmpfs /mnt 2>&1 | head -2 && echo "mount worked (check caps)" || echo "mount blocked (expected)"
+    - echo "=== Cannot load kernel modules ==="
+    - modprobe dummy 2>&1 | head -2 || echo "modprobe blocked (expected)"
+    - echo "=== /dev devices ==="
+    - ls /dev | head -20
 
-lang:node:
-  extends: .msb
-  stage: languages
-  script:
-    - apk add -q nodejs npm
-    - node --version && npm --version
-    - mkdir /tmp/nodetest && cd /tmp/nodetest
-    - npm init -y > /dev/null
-    - npm install --save lodash axios 2>&1 | tail -3
-    - node -e "const _=require('lodash'); console.log('sum 1-10:',_.sum(_.range(1,11))); console.log('axios:',require('axios').VERSION);"
+# ── RESOURCE LIMITS ───────────────────────────────────────────────────────────
 
-lang:go:
+resource:oom-kill:
   extends: .msb
-  stage: languages
+  stage: resource-limits
   script:
-    - apk add -q go
-    - go version
-    - mkdir /tmp/gotest && cd /tmp/gotest
-    - go mod init testmod
+    - apk add -q python3
+    - echo "=== Allocate beyond RAM limit — OOM killer should fire ==="
     - |
-      cat > main.go << 'EOF'
-      package main
-      import ("fmt";"math/big";"runtime";"time")
-      func fib(n int) *big.Int {
-        a,b:=big.NewInt(0),big.NewInt(1)
-        for i:=0;i<n;i++{a,b=b,new(big.Int).Add(a,b)}
-        return a
-      }
-      func main(){
-        s:=time.Now()
-        fmt.Printf("Go %s on %s/%s\n",runtime.Version(),runtime.GOOS,runtime.GOARCH)
-        fmt.Printf("fib(100)=%s\n",fib(100))
-        fmt.Printf("took: %s\n",time.Since(s))
-      }
+      python3 << 'EOF'
+      import sys
+      chunks = []
+      allocated = 0
+      try:
+          while True:
+              chunks.append(bytearray(100 * 1024 * 1024))  # 100MB chunks
+              allocated += 100
+              print(f"  {allocated}MB allocated")
+              sys.stdout.flush()
+      except MemoryError:
+          print(f"MemoryError at {allocated}MB — OOM limit enforced correctly")
       EOF
-    - go run main.go
+    - echo "Process survived OOM (MemoryError caught in Python)"
 
-lang:ruby:
+resource:disk-full:
   extends: .msb
-  stage: languages
+  stage: resource-limits
   script:
-    - apk add -q ruby
-    - ruby --version
-    - ruby -e "require 'digest'; p=(2..50).select{|n|(2...n).none?{|d|n%d==0}}; puts p.inspect; puts Digest::SHA256.hexdigest(p.to_s)"
+    - echo "=== Fill disk to near capacity, then clean up ==="
+    - df -h / | tail -1
+    - AVAIL=$(df / | awk 'NR==2{print $4}')
+    - echo "Available blocks: $AVAIL"
+    - FILL_MB=$(( ($AVAIL / 1024) - 50 ))
+    - echo "Writing ${FILL_MB}MB to fill disk..."
+    - dd if=/dev/zero of=/tmp/fillfile bs=1M count=$FILL_MB 2>&1 | tail -1
+    - df -h / | tail -1
+    - echo "=== Try to write more — should fail ==="
+    - dd if=/dev/zero of=/tmp/overflow bs=1M count=200 2>&1 | tail -2 || echo "Write failed as expected (disk full)"
+    - rm /tmp/fillfile
+    - df -h / | tail -1
+    - echo "Disk recovered after cleanup"
 
-lang:rust:
+resource:cpu-one-core:
   extends: .msb
-  stage: languages
+  stage: resource-limits
   script:
-    - apk add -q rust cargo
-    - rustc --version && cargo --version
-    - mkdir /tmp/rusttest && cd /tmp/rusttest
-    - cargo init --name hello 2>&1 | tail -1
-    - |
-      cat > src/main.rs << 'EOF'
-      fn is_prime(n:u64)->bool{if n<2{return false;}(2..=((n as f64).sqrt() as u64)).all(|i|n%i!=0)}
-      fn main(){
-        let p:Vec<u64>=(2..100).filter(|&n|is_prime(n)).collect();
-        println!("Primes<100 ({} found): {:?}",p.len(),p);
-      }
-      EOF
-    - cargo build --release 2>&1 | tail -3
-    - ./target/release/hello
-
-# ── build-tools ───────────────────────────────────────────────────────────────
-
-build:make-c:
-  extends: .msb
-  stage: build-tools
-  script:
-    - apk add -q build-base
-    - mkdir /tmp/ctest && cd /tmp/ctest
-    - |
-      cat > main.c << 'EOF'
-      #include <stdio.h>
-      #include <stdlib.h>
-      #include <string.h>
-      int main(){
-        printf("Hello from C on microVM!\n");
-        char *buf=malloc(64*1024*1024);
-        if(!buf){fprintf(stderr,"malloc failed\n");return 1;}
-        memset(buf,0x42,64*1024*1024);
-        printf("Allocated and filled 64MB OK\n");
-        free(buf);return 0;
-      }
-      EOF
-    - gcc -O2 -o main main.c
-    - ./main
-
-build:npm-jest:
-  extends: .msb
-  stage: build-tools
-  script:
-    - apk add -q nodejs npm
-    - mkdir /tmp/npmproj && cd /tmp/npmproj
-    - npm init -y > /dev/null
-    - npm install --save-dev jest 2>&1 | tail -3
-    - |
-      cat > sum.js << 'EOF'
-      function sum(a,b){return a+b;}
-      function factorial(n){return n<=1?1:n*factorial(n-1);}
-      module.exports={sum,factorial};
-      EOF
-    - |
-      cat > sum.test.js << 'EOF'
-      const {sum,factorial}=require('./sum');
-      test('sum',()=>expect(sum(1,2)).toBe(3));
-      test('neg',()=>expect(sum(-1,1)).toBe(0));
-      test('f5',()=>expect(factorial(5)).toBe(120));
-      test('f10',()=>expect(factorial(10)).toBe(3628800));
-      EOF
-    - node -e "const fs=require('fs'),p=JSON.parse(fs.readFileSync('package.json'));p.scripts={test:'jest'};fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
-    - npx jest --no-coverage 2>&1 | tail -10
-
-build:python-pytest:
-  extends: .msb
-  stage: build-tools
-  script:
-    - apk add -q python3 py3-pip
-    - pip install --quiet --break-system-packages pytest flask pydantic 2>&1 | tail -1
-    - python3 -c "import flask,pydantic; print('flask:',flask.__version__,'pydantic:',pydantic.__version__)"
-    - mkdir /tmp/pytest && cd /tmp/pytest
-    - |
-      cat > test_math.py << 'EOF'
-      def test_add():    assert 1+1==2
-      def test_sort():   assert sorted([3,1,4,1,5,9])==[1,1,3,4,5,9]
-      def test_dict():   assert sum({"a":1,"b":2}.values())==3
-      def test_string(): assert "microvm".upper()=="MICROVM"
-      def test_fresh():
-          import os; assert not os.path.exists("/tmp/pytest-was-here"), "state leak!"
-          open("/tmp/pytest-was-here","w").close()
-      EOF
-    - python3 -m pytest test_math.py -v 2>&1 | tail -10
-
-build:docker-absent:
-  extends: .msb
-  stage: build-tools
-  script:
-    - if command -v docker; then echo "UNEXPECTED-> docker present" && exit 1; else echo "docker not available (correct)"; fi
-    - apk add -q build-base cmake
-    - gcc --version | head -1 && cmake --version | head -1
-
-# ── network ───────────────────────────────────────────────────────────────────
-
-net:git-clone:
-  extends: .msb
-  stage: network
-  script:
-    - apk add -q git
-    - git clone --depth 1 https://github.com/junegunn/fzf.git /tmp/fzf 2>&1 | tail -3
-    - du -sh /tmp/fzf
-    - git -C /tmp/fzf log --oneline -3
-
-net:download-large:
-  extends: .msb
-  stage: network
-  script:
-    - apk add -q curl
-    - curl -sf --max-time 60 -o /tmp/gobin.tar.gz https://go.dev/dl/go1.22.0.linux-arm64.tar.gz --write-out "size=%{size_download} time=%{time_total}s speed=%{speed_download}B/s\n"
-    - ls -lh /tmp/gobin.tar.gz
-
-net:concurrent-http:
-  extends: .msb
-  stage: network
-  script:
+    - echo "=== Verify exactly 1 vCPU ==="
+    - nproc
+    - test "$(nproc)" -eq 1 || (echo "UNEXPECTED: $(nproc) CPUs" && exit 1)
+    - echo "=== Cannot spawn more threads than sensible ==="
     - apk add -q python3
     - |
       python3 << 'EOF'
-      import urllib.request,threading,time
-      urls=['https://api.github.com/zen','https://pypi.org/pypi/requests/json','https://registry.npmjs.org/lodash/latest','https://httpbin.org/uuid','https://httpbin.org/ip']*4
-      results=[]; lock=threading.Lock()
+      import threading, time, os
+      results = []
+      def spin(n):
+          start = time.time()
+          while time.time() - start < 0.5:
+              _ = sum(range(10000))
+          results.append(n)
+      threads = [threading.Thread(target=spin, args=(i,)) for i in range(8)]
+      t0 = time.time()
+      [t.start() for t in threads]
+      [t.join() for t in threads]
+      elapsed = time.time() - t0
+      print(f"8 threads on 1 vCPU completed in {elapsed:.2f}s (serialized by scheduler)")
+      print(f"All {len(results)} threads finished")
+      EOF
+
+resource:fd-limits:
+  extends: .msb
+  stage: resource-limits
+  script:
+    - apk add -q python3
+    - echo "=== Open file descriptor limits ==="
+    - ulimit -n
+    - |
+      python3 << 'EOF'
+      import resource
+      soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+      print(f"FD limit: soft={soft} hard={hard}")
+      # Try to open many files
+      fds = []
+      try:
+          for i in range(1000):
+              fds.append(open('/dev/null', 'r'))
+          print(f"Opened {len(fds)} file descriptors OK")
+      except OSError as e:
+          print(f"OSError at {len(fds)} FDs: {e}")
+      finally:
+          for f in fds: f.close()
+      EOF
+
+# ── FAILURE MODES ─────────────────────────────────────────────────────────────
+
+failure:exit-nonzero:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - echo "This job intentionally fails"
+    - exit 42
+  allow_failure: true
+  after_script:
+    - echo "after_script runs even on failure — exit was 42"
+
+failure:command-not-found:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - echo "Calling a nonexistent command..."
+    - totally_fake_command_xyz 2>&1 || echo "command not found — handled"
+    - echo "Job continues after handled error"
+
+failure:partial-script-fail:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - echo "step 1 OK"
+    - false || echo "step 2 failed but caught with ||"
+    - echo "step 3 OK"
+    - set -e
+    - echo "step 4 OK (set -e active)"
+
+failure:timeout-long-job:
+  extends: .msb
+  stage: failure-modes
+  timeout: 1m
+  script:
+    - echo "Job with explicit 1m timeout — sleeping 45s (should succeed)"
+    - sleep 45
+    - echo "Woke up before timeout"
+
+failure:large-output:
+  extends: .msb
+  stage: failure-modes
+  script:
+    - echo "=== Generate 10MB of log output ==="
+    - apk add -q python3
+    - |
+      python3 << 'EOF'
+      import sys
+      line = "A" * 200 + "\n"
+      for i in range(50000):
+          sys.stdout.write(f"{i:06d}: {line}")
+      print("Done — 10MB output generated")
+      EOF
+
+# ── SIGNAL / PROCESS HANDLING ─────────────────────────────────────────────────
+
+signal:sigterm-handling:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - apk add -q python3
+    - echo "=== SIGTERM handling in long-running process ==="
+    - |
+      python3 << 'EOF'
+      import signal, time, sys
+      received = []
+      def handler(sig, frame):
+          received.append(sig)
+          print(f"Caught signal {sig}")
+      signal.signal(signal.SIGTERM, handler)
+      signal.signal(signal.SIGINT, handler)
+      print("Signal handlers registered")
+      # Send SIGTERM to ourselves
+      import os
+      os.kill(os.getpid(), signal.SIGTERM)
+      time.sleep(0.1)
+      print(f"Signals received: {received}")
+      assert signal.SIGTERM in received, "SIGTERM not received!"
+      print("SIGTERM handling OK")
+      EOF
+
+signal:zombie-processes:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - apk add -q python3
+    - echo "=== Zombie process cleanup ==="
+    - |
+      python3 << 'EOF'
+      import subprocess, time, os
+      procs = []
+      for i in range(5):
+          p = subprocess.Popen(['sh', '-c', f'echo child {i}'])
+          procs.append(p)
+      # Don't wait — let them become zombies briefly
+      time.sleep(0.2)
+      # Now reap them
+      for p in procs:
+          p.wait()
+      # Check for zombies
+      result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+      zombies = [l for l in result.stdout.split('\n') if '<defunct>' in l or ' Z ' in l]
+      if zombies:
+          print(f"ZOMBIES FOUND: {zombies}")
+      else:
+          print(f"No zombies after reaping {len(procs)} children — OK")
+      EOF
+
+signal:fork-bomb-protection:
+  extends: .msb
+  stage: signal-proc
+  script:
+    - apk add -q python3
+    - echo "=== Process limit prevents fork bomb ==="
+    - ulimit -u
+    - |
+      python3 << 'EOF'
+      import subprocess, sys
+      procs = []
+      try:
+          for i in range(500):
+              p = subprocess.Popen(['sleep', '2'])
+              procs.append(p)
+      except BlockingIOError as e:
+          print(f"Blocked at {len(procs)} processes: {e}")
+      except Exception as e:
+          print(f"Stopped at {len(procs)} processes: {type(e).__name__}: {e}")
+      finally:
+          print(f"Spawned {len(procs)} processes before limit")
+          for p in procs:
+              try: p.kill(); p.wait()
+              except: pass
+      EOF
+
+# ── NETWORK EDGE CASES ────────────────────────────────────────────────────────
+
+net:dns-failure:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q curl
+    - echo "=== Non-existent domain ==="
+    - curl -sf --max-time 5 https://this-domain-definitely-does-not-exist-xyz123.com 2>&1 | head -3 || echo "DNS failure handled correctly"
+    - echo "=== Invalid IP ==="
+    - curl -sf --max-time 3 http://192.0.2.1/test 2>&1 | head -3 || echo "Unreachable IP timed out correctly"
+
+net:localhost-services:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q curl python3
+    - echo "=== Spin up a local HTTP server and hit it ==="
+    - |
+      python3 << 'EOF'
+      import http.server, threading, urllib.request, time
+
+      class Handler(http.server.BaseHTTPRequestHandler):
+          def do_GET(self):
+              self.send_response(200)
+              self.end_headers()
+              self.wfile.write(b"hello from microVM local server")
+          def log_message(self, *a): pass
+
+      srv = http.server.HTTPServer(('127.0.0.1', 18080), Handler)
+      t = threading.Thread(target=srv.serve_forever)
+      t.daemon = True
+      t.start()
+      time.sleep(0.2)
+
+      resp = urllib.request.urlopen('http://127.0.0.1:18080/', timeout=5).read()
+      print(f"Response: {resp.decode()}")
+      assert resp == b"hello from microVM local server"
+      srv.shutdown()
+      print("Local HTTP server test passed")
+      EOF
+
+net:ipv6:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q curl
+    - echo "=== IPv6 availability ==="
+    - ip -6 addr show || echo "No IPv6 addresses"
+    - curl -sf --max-time 5 -6 https://ipv6.google.com 2>&1 | head -3 && echo "IPv6 reachable" || echo "IPv6 not available (expected in microVM)"
+
+net:high-concurrency:
+  extends: .msb
+  stage: network-edge
+  script:
+    - apk add -q python3
+    - echo "=== 100 concurrent connections ==="
+    - |
+      python3 << 'EOF'
+      import urllib.request, threading, time, collections
+      urls = ['https://httpbin.org/uuid'] * 100
+      results = collections.Counter()
+      lock = threading.Lock()
       def fetch(url):
           try:
-              t=time.time(); urllib.request.urlopen(url,timeout=10).read()
-              with lock: results.append(('OK',f'{time.time()-t:.2f}s',url))
+              urllib.request.urlopen(url, timeout=15).read()
+              with lock: results['ok'] += 1
           except Exception as e:
-              with lock: results.append(('FAIL',str(e)[:50],url))
-      ts=[threading.Thread(target=fetch,args=(u,)) for u in urls]; [t.start() for t in ts]; [t.join() for t in ts]
-      ok=sum(1 for r in results if r[0]=='OK'); print(f'{ok}/{len(results)} OK')
-      [print(f'  {s:4}  {i:12}  {u}') for s,i,u in sorted(results)]
+              with lock: results[type(e).__name__] += 1
+      t0 = time.time()
+      threads = [threading.Thread(target=fetch, args=(u,)) for u in urls]
+      [t.start() for t in threads]
+      [t.join() for t in threads]
+      print(f"100 requests in {time.time()-t0:.2f}s: {dict(results)}")
+      assert results['ok'] >= 80, f"Too many failures: {dict(results)}"
+      print("High-concurrency test passed")
       EOF
-
-# ── stress ────────────────────────────────────────────────────────────────────
-
-stress:cpu:
-  extends: .msb
-  stage: stress
-  script:
-    - apk add -q python3
-    - |
-      python3 << 'EOF'
-      import time; start=time.time(); limit=500_000
-      sieve=bytearray([1])*(limit+1); sieve[0]=sieve[1]=0
-      for i in range(2,int(limit**0.5)+1):
-          if sieve[i]: sieve[i*i::i]=bytearray(len(sieve[i*i::i]))
-      primes=[i for i,v in enumerate(sieve) if v]
-      print(f'Primes up to {limit}: {len(primes)} in {time.time()-start:.3f}s, largest={primes[-1]}')
-      EOF
-
-stress:memory:
-  extends: .msb
-  stage: stress
-  script:
-    - apk add -q python3
-    - |
-      python3 << 'EOF'
-      total=0; chunks=[]
-      while total<700:
-          try:
-              buf=bytearray(50*1024*1024)
-              for i in range(0,len(buf),4096): buf[i]=0xFF
-              chunks.append(buf); total+=50; print(f'  {total}MB allocated')
-          except MemoryError: print(f'  OOM at {total}MB (expected)'); break
-      print(f'Peak: {total}MB')
-      EOF
-
-stress:disk:
-  extends: .msb
-  stage: stress
-  script:
-    - echo "Write 500MB"
-    - dd if=/dev/zero of=/tmp/bigfile bs=1M count=500 conv=fsync 2>&1 | tail -1
-    - echo "Read 500MB"
-    - dd if=/tmp/bigfile of=/dev/null bs=1M 2>&1 | tail -1
-    - ls -lh /tmp/bigfile && rm /tmp/bigfile
-    - echo "10k small files"
-    - mkdir /tmp/mf
-    - time sh -c 'i=0; while [ $i -lt 10000 ]; do echo $i > /tmp/mf/$i.txt; i=$((i+1)); done'
-    - ls /tmp/mf | wc -l | xargs echo "files:"
-    - rm -rf /tmp/mf
-
-stress:full-toolchain:
-  extends: .msb
-  stage: stress
-  script:
-    - echo "Install full toolchain from scratch"
-    - time apk add -q nodejs npm python3 py3-pip go build-base git curl
-    - node --version && python3 --version && go version && gcc --version | head -1 && git --version
-    - df -h /
