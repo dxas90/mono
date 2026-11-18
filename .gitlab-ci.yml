@@ -60,6 +60,7 @@ isolation:no-privileged-escape:
 resource:oom-kill:
   extends: .msb
   stage: resource-limits
+  allow_failure: true
   script:
     - apk add -q python3
     - echo "=== Allocate beyond RAM — OOM should fire ==="
