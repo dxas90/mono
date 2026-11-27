@@ -7,12 +7,13 @@ Monorepo for GitOps-driven Kubernetes deployments plus multiple application subm
 ```text
 mono-learn/
 ├── apps/         # Application submodules
-├── bootstrap/    # Flux + cluster bootstrap manifests
-├── clusters/     # Cluster-specific Flux sync and vars
 ├── base/         # Base app definitions for GitOps
+├── bootstrap/    # Flux + cluster bootstrap manifests
+├── charts/       # Helm chart with tests
+├── clusters/     # Cluster-specific Flux sync and vars
 ├── overlays/     # Environment overlays (dev/stg/prod)
-├── templates/    # GitLab CI/CD component templates
-└── docs/         # Project documentation
+├── scripts/      # Helper scripts
+└── templates/    # GitLab CI/CD component templates
 ```
 
 ## Quick start
@@ -37,13 +38,15 @@ git submodule update --init --recursive --remote
 
 ## Applications
 
+The applications live in their own repositories, mounted as git submodules under `apps/`. See [apps/README.md](apps/README.md) for the list of apps and their repositories.
+
 | App | Path | Description |
 | --- | --- | --- |
-| learn-go | [apps/learn-go](apps/learn-go/README.md) | Go API service |
-| learn-python | [apps/learn-python](apps/learn-python/README.md) | Python API service |
-| learn-rust | [apps/learn-rust](apps/learn-rust/README.md) | Rust API service |
-| mesh | [apps/mesh](apps/mesh/README.md) | GraphQL Mesh gateway |
-| ui | [apps/ui](apps/ui/README.md) | Web UI for API exploration |
+| learn-go | `apps/learn-go` | Go API service |
+| learn-python | `apps/learn-python` | Python API service |
+| learn-rust | `apps/learn-rust` | Rust API service |
+| mesh | `apps/mesh` | GraphQL Mesh gateway |
+| ui | `apps/ui` | Web UI for API exploration |
 
 Submodules are defined in [.gitmodules](.gitmodules).
 
@@ -60,7 +63,25 @@ Reusable pipeline components live under [templates/README.md](templates/README.m
 
 ## Documentation
 
-Start with [templates/docs/GETTING_STARTED.md](templates/docs/GETTING_STARTED.md) and [templates/docs/WORKFLOW.md](templates/docs/WORKFLOW.md).
+- [CLAUDE.md](CLAUDE.md) — repository conventions and agent guidance
+- [apps/README.md](apps/README.md) — application submodules
+- [base/README.md](base/README.md) — base app definitions
+- [bootstrap/README.md](bootstrap/README.md) — Flux + cluster bootstrap
+- [clusters/README.md](clusters/README.md) — cluster sync and vars
+- [overlays/README.md](overlays/README.md) — environment overlays
+- [scripts/README.md](scripts/README.md) — helper scripts
+- [templates/README.md](templates/README.md) — GitLab CI/CD component templates
+
+Guides under `templates/docs/`:
+
+- [templates/docs/ARCHITECTURE.md](templates/docs/ARCHITECTURE.md)
+- [templates/docs/CONTRIBUTING.md](templates/docs/CONTRIBUTING.md)
+- [templates/docs/GETTING_STARTED.md](templates/docs/GETTING_STARTED.md)
+- [templates/docs/MIGRATION.md](templates/docs/MIGRATION.md)
+- [templates/docs/QUICKREF.md](templates/docs/QUICKREF.md)
+- [templates/docs/SECURITY.md](templates/docs/SECURITY.md)
+- [templates/docs/SUMMARY.md](templates/docs/SUMMARY.md)
+- [templates/docs/WORKFLOW.md](templates/docs/WORKFLOW.md)
 
 ## License
 
