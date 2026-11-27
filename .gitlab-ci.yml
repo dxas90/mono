@@ -17,6 +17,7 @@ include:
   - local: .gitlab-ci-security.yml
 
 stages:
+  - lint
   - build
   - push
   - test
@@ -28,6 +29,17 @@ variables:
   EPHEMERAL_NAMESPACE: "ephemeral-${CI_COMMIT_REF_SLUG}"
   STAGING_NAMESPACE: "staging"
   PRODUCTION_NAMESPACE: "production"
+
+# -------------------------------------------------
+# LINT (EVERY PUSH AND MERGE REQUEST)
+# -------------------------------------------------
+
+lint:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install --quiet yamllint
+    - yamllint --parseable .gitlab-ci.yml $(find templates -name '*.yml' -type f | sort)
 
 # -------------------------------------------------
 # FEATURE BRANCH PIPELINE
